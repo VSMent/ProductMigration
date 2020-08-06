@@ -46,6 +46,7 @@ p.post_title as "description/name"
 FROM wp_posts p
 WHERE post_type = \'product\'
 AND post_status <> \'auto-draft\'
+and p.ID = 11
 ';
 
         $stmt = $this->pdoWC->query($sql);
@@ -61,7 +62,7 @@ AND post_status <> \'auto-draft\'
             $row['review'] = $this->getProductReview($row['ID']);
             $row['taxonomies'] = $this->getTaxonomies($row['ID']);
             $row['images'] = $this->getImages($row['ID']);
-            $this->productsWC[] = $row;
+            $this->productsWC[$row['ID']] = $row;
         }
     }
 
@@ -142,16 +143,23 @@ WHERE $id = cm.comment_id
         return $rows;
     }
 
-    private function getTaxonomies($id)
+    private function getTaxonomies($id, $isProductId = true)
     {
-        $sql = "
-SELECT tt.*, t.*
-FROM wp_term_relationships tr,
+        $fromWhere = $isProductId
+            ? "FROM wp_term_relationships tr,
      wp_term_taxonomy tt,
      wp_terms t
 WHERE $id = tr.object_id
-  AND tr.term_taxonomy_id = tt.term_id
-  AND tr.term_taxonomy_id = t.term_id
+  AND tr.term_taxonomy_id = tt.term_taxonomy_id
+  AND tt.term_id = t.term_id"
+            : "FROM wp_term_taxonomy tt,
+     wp_terms t
+WHERE t.term_id = tt.term_id
+  AND tt.term_id = $id";
+
+        $sql = "
+SELECT tt.*, t.*
+$fromWhere
 ";
         $stmt = $this->pdoWC->query($sql);
         if (!$stmt) {
@@ -161,7 +169,12 @@ WHERE $id = tr.object_id
 
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
         foreach ($rows as &$row) {
-            $row += $this->getTaxonomyMeta($row['term_id']);
+            if ($row['parent'] != 0) {
+                $rows[] = $this->getTaxonomies($row['parent'], false)[0];
+            }
+            if (!$isProductId) {
+                $row += $this->getTaxonomyMeta($row['term_id']);
+            }
         }
 
         return $rows;
@@ -238,7 +251,7 @@ WHERE '$name' = wcat.attribute_name
 
     private function processProducts()
     {
-        foreach ($this->productsWC as &$row) {
+        foreach ($this->productsWC as $rowId => &$row) {
             $row['tax_class_id'] = $row['meta']['_downloadable'] == 'yes' ? 10 : 0;
             $row['sku'] = $row['meta']['_sku'];
             $row['quantity'] = $row['meta']['_stock'];
@@ -256,24 +269,24 @@ WHERE '$name' = wcat.attribute_name
             $relatedProducts = unserialize($row['meta']['_crosssell_ids']);
             if (is_array($relatedProducts)) {
                 foreach ($relatedProducts as $relatedProductId) {
-                    $row['related'][] = ['product_id' => $row['ID'], 'related_id' => $relatedProductId];
+                    $row['related'][] = ['product_id' => $rowId, 'related_id' => $relatedProductId];
                 }
             }
 
             $productGallery = explode(',', $row['meta']['_product_image_gallery']);
             if (is_array($productGallery)) {
                 foreach ($productGallery as $imageId) {
-                    $row['image/'][] = ['product_image_id' => $imageId, 'image' => $row['images'][$imageId], 'product_id' => $row['ID'], 'sort_order' => 0];
+                    $row['image/'][] = ['product_image_id' => $imageId, 'image' => $row['images'][$imageId], 'product_id' => $rowId, 'sort_order' => 0];
                 }
             }
 
-            $this->attributeWC[$row['ID']] = unserialize($row['meta']['_product_attributes']);
+            $this->attributeWC[$rowId] = unserialize($row['meta']['_product_attributes']);
 //            if (is_array($productAttributes)) {
 //                foreach ($productAttributes as $attribute) {
-//                    $row['image/'][] = ['product_image_id' => $imageId, 'image' => $row['images'][$imageId], 'product_id' => $row['ID'], 'sort_order' => 0];
+//                    $row['image/'][] = ['product_image_id' => $imageId, 'image' => $row['images'][$imageId], 'product_id' => $rowId, 'sort_order' => 0];
 //                }
 //            }
-            $this->processProductsTaxonomies($row['taxonomies'], $row['ID']);
+            $this->processProductsTaxonomies($row['taxonomies'], $rowId);
 
 
             unset($row['meta']['_downloadable']);
@@ -319,9 +332,9 @@ WHERE '$name' = wcat.attribute_name
     {
         foreach ($taxonomies as &$taxonomy) {
             if ($taxonomy['taxonomy'] == 'product_cat') {
-                $this->categoriesWC[] = $taxonomy;
+                $this->categoriesWC[$pID][] = $taxonomy;
             } else if ($taxonomy['taxonomy'] == 'product_tag') {
-                $this->tagsWC[] = $taxonomy;
+                $this->tagsWC[$pID][] = $taxonomy;
             } else if (strpos($taxonomy['taxonomy'], 'pa_') === 0) {
                 $this->attributeWC[$pID][$taxonomy['taxonomy']]['value'] = $taxonomy['name'];
                 $this->attributeWC[$pID][$taxonomy['taxonomy']]['name'] = $this->getWCAttributeLabel(substr($taxonomy['taxonomy'], 3));
