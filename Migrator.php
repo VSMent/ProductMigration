@@ -200,13 +200,16 @@ WHERE $id = tm.term_id
         return $rows;
     }
 
-    private function getImages($id)
+    private function getImages($id, $isImageId = false)
     {
+        $where = $isImageId
+            ? "$id = p.ID"
+            : "$id = p.post_parent";
         $sql = "
 SELECT p.ID,
        REPLACE(p.guid, CONCAT((SELECT option_value FROM wp_options WHERE option_name = 'home'), '/'), '') as guid
 FROM wp_posts p
-WHERE $id = p.post_parent
+WHERE $where
   AND p.post_type = 'attachment'
 ";
         $stmt = $this->pdoWC->query($sql);
@@ -224,8 +227,6 @@ WHERE $id = p.post_parent
 
         return $rows;
     }
-    // TODO GET CATEGORY PARENT(S)
-    // TODO GET CATEGORY IMAGE
 
     private function getWCAttributeLabel($name)
     {
@@ -335,6 +336,19 @@ WHERE '$name' = wcat.attribute_name
         $tags = [];
         foreach ($taxonomies as $taxonomy) {
             if ($taxonomy['taxonomy'] == 'product_cat') {
+                unset($taxonomy['term_taxonomy_id']);
+                unset($taxonomy['taxonomy']);
+                unset($taxonomy['description']);
+                unset($taxonomy['count']);
+                unset($taxonomy['term_group']);
+                unset($taxonomy['/meta/order']);
+                unset($taxonomy['/meta/display_type']);
+                unset($taxonomy['/meta/product_count_product_cat']);
+                if (isset($taxonomy['/meta/thumbnail_id'])) {
+                    $taxonomy['image'] = $this->getImages($taxonomy['/meta/thumbnail_id'], true)[$taxonomy['/meta/thumbnail_id']];
+                }
+                unset($taxonomy['/meta/thumbnail_id']);
+                unset($taxonomy['slug']);
                 $this->categoriesWC[$pID][] = $taxonomy;
             } else if ($taxonomy['taxonomy'] == 'product_tag') {
                 $tags[] = $taxonomy['name'];
@@ -401,7 +415,7 @@ WHERE product_id = 51
         $prefix = 'oc_product_';
         foreach ($rows as $row) {
 //            $row['manufacturer'] = $this->getIPTables($row['manufacturer_id'], 'oc_manufacturer', '*', 't.manufacturer_id = $id');
-            $row['_attribute'] = $this->getIPTables($row['product_id'], $prefix . 'attribute');
+//            $row['_attribute'] = $this->getIPTables($row['product_id'], $prefix . 'attribute');
             $row['_description'] = $this->getIPTables($row['product_id'], $prefix . 'description');
             $row['_discount'] = $this->getIPTables($row['product_id'], $prefix . 'discount');
 //            $row['_filter'] = $this->getIPTables($row['product_id'], $prefix . 'filter');
