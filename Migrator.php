@@ -29,7 +29,6 @@ class Migrator
 
         // Check
         self::getImportedProducts();
-        self::getImportedCategories();
     }
 
 #region GET_DATA
@@ -251,7 +250,7 @@ WHERE $id = p.post_parent
                 }
             }
 
-            $row['attributes']=$productAttributes = unserialize($row['meta']['_product_attributes']);
+            $row['attributes'] = $productAttributes = unserialize($row['meta']['_product_attributes']);
 //            if (is_array($productAttributes)) {
 //                foreach ($productAttributes as $attribute) {
 //                    $row['image/'][] = ['product_image_id' => $imageId, 'image' => $row['images'][$imageId], 'product_id' => $row['ID'], 'sort_order' => 0];
@@ -346,6 +345,7 @@ WHERE product_id = 51
 //            $row['_to_download'] = $this->getIPTables($row['product_id'], $prefix . 'to_download');
             $row['_to_layout'] = $this->getIPTables($row['product_id'], $prefix . 'to_layout');
             $row['_to_store'] = $this->getIPTables($row['product_id'], $prefix . 'to_store');
+            $this->getImportedCategories($row['product_id']);
 
             unset($row['upc']);
             unset($row['ean']);
@@ -384,13 +384,19 @@ WHERE $where
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    private function getImportedCategories()
+    private function getImportedCategories($id, $isProductId = true)
     {
-        $sql = '
+        $fromWhere = $isProductId
+            ? "FROM oc_category c, oc_product_to_category ptc
+WHERE ptc.product_id = $id
+AND c.category_id = ptc.category_id"
+            : "FROM oc_category c
+WHERE c.category_id = $id";
+        $sql = "
 SELECT 
 c.*
-FROM oc_category c
-';
+$fromWhere
+";
         $stmt = $this->pdoOC->query($sql);
         if (!$stmt) {
             print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
@@ -401,6 +407,9 @@ FROM oc_category c
 
         foreach ($rows as $row) {
             $this->categoriesOC[] = $row;
+            if ($row['parent_id'] != 0) {
+                self::getImportedCategories($row['parent_id'], false);
+            }
         }
     }
 
