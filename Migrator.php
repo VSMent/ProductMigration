@@ -46,7 +46,6 @@ p.post_title as "description/name"
 FROM wp_posts p
 WHERE post_type = \'product\'
 AND post_status <> \'auto-draft\'
-and p.ID = 11
 ';
 
         $stmt = $this->pdoWC->query($sql);
@@ -406,7 +405,7 @@ WHERE product_id = 51
             unset($row['minimum']);
             unset($row['viewed']);
 
-            $this->productsOC[] = $row;
+            $this->productsOC[$row['product_id']] = $row;
         }
     }
 
@@ -452,11 +451,14 @@ $fromWhere
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($rows as $row) {
-            $this->categoriesOC[] = $row;
             if ($row['parent_id'] != 0) {
-                $this->getImportedCategories($row['parent_id'], false);
+                $rows[] = $this->getImportedCategories($row['parent_id'], false);
             }
         }
+        if (!$isProductId) {
+            return $rows[0];
+        }
+        $this->categoriesOC[$id] = $rows;
     }
 
     public function listAll($isCLI, $show = 'a')
