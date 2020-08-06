@@ -413,80 +413,80 @@ $fromWhere
         }
     }
 
-    public function listAll($isCLI)
+    public function listAll($isCLI, $show = 'a')
     {
         #region WC
         echo $isCLI
             ? "products WC\n" . str_repeat("_", 10) . "\n"
-            : "<div style='width: 49%; display: inline-block; margin-right: 2%;'><h3>products WC</h3><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+            : "<div style='width: 49%; display: inline-block; margin-right: 2%;'><details " . (strpos($show, 'p') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>products WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->productsWC);
         echo $isCLI
             ? "\n"
-            : "</pre>";
+            : "</pre></details>";
 
 
         echo $isCLI
             ? "categories WC\n" . str_repeat("_", 10) . "\n"
-            : "<h3>categories WC</h3><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+            : "<details " . (strpos($show, 'c') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>categories WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->categoriesWC);
         echo $isCLI
             ? "\n"
-            : "</pre>";
+            : "</pre></details>";
 
 
         echo $isCLI
             ? "tags WC\n" . str_repeat("_", 10) . "\n"
-            : "<h3>tags WC</h3><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+            : "<details " . (strpos($show, 't') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>tags WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->tagsWC);
         echo $isCLI
             ? "\n"
-            : "</pre>";
+            : "</pre></details>";
 
 
         echo $isCLI
             ? "product_meta WC\n" . str_repeat("_", 10) . "\n"
-            : "<h3>product_meta WC</h3><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+            : "<details " . (strpos($show, 'm') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>product_meta WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->product_metaWC);
         echo $isCLI
             ? "\n"
-            : "</pre></div>";
+            : "</pre></details></div>";
         #endregion
 
         #region OC
         echo $isCLI
             ? "products OC\n" . str_repeat("_", 10) . "\n"
-            : "<div style='width: 49%; display: inline-block;float:right;'><h3>products OC</h3><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+            : "<div style='width: 49%; display: inline-block;float:right;'><details " . (strpos($show, 'p') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>products OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->productsOC);
         echo $isCLI
             ? "\n"
-            : "</pre>";
+            : "</pre></details>";
 
 
         echo $isCLI
             ? "categories OC\n" . str_repeat("_", 10) . "\n"
-            : "<h3>categories OC</h3><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+            : "<details " . (strpos($show, 'c') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>categories OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->categoriesOC);
         echo $isCLI
             ? "\n"
-            : "</pre>";
+            : "</pre></details>";
 
 
         echo $isCLI
             ? "tags OC\n" . str_repeat("_", 10) . "\n"
-            : "<h3>tags OC</h3><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+            : "<details " . (strpos($show, 't') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>tags OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->tagsOC);
         echo $isCLI
             ? "\n"
-            : "</pre>";
+            : "</pre></details>";
 
 
         echo $isCLI
             ? "product_meta OC\n" . str_repeat("_", 10) . "\n"
-            : "<h3>product_meta OC</h3><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+            : "<details " . (strpos($show, 'm') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>product_meta OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->product_metaOC);
         echo $isCLI
             ? "\n"
-            : "</pre></div>";
+            : "</pre></details></div>";
         #endregion
     }
 #endregion
