@@ -29,6 +29,7 @@ class Migrator
 
         // Check
         self::getImportedProducts();
+        self::getImportedCategories();
     }
 
 #region GET_DATA
@@ -59,7 +60,7 @@ AND post_status <> \'auto-draft\'
         foreach ($rows as $row) {
             $row['meta'] = $this->getProductMeta($row['ID']);
             $row['review'] = $this->getProductReview($row['ID']);
-//            $row['taxonomies'] = $this->getTaxonomies($row['ID']);
+            $row['taxonomies'] = $this->getTaxonomies($row['ID']);
             $row['images'] = $this->getImages($row['ID']);
             $this->productsWC[] = $row;
         }
@@ -234,14 +235,28 @@ WHERE $id = p.post_parent
             $row['weight'] = $row['meta']['_width'];
             $row['height'] = $row['meta']['_height'];
             $row['subtract'] = 1;
-            $relatedProducts = preg_split("/a:\d+:|i:\d+;i:|[{};]/", $row['meta']['_crosssell_ids'], -1, PREG_SPLIT_NO_EMPTY);
-            foreach ($relatedProducts as $relatedProductId) {
-                $row['related'][] = ['product_id' => $row['ID'], 'related_id' => $relatedProductId];
-            }
             $row['image'] = $row['images'][$row['meta']['_thumbnail_id']];
-            foreach (explode(',', $row['meta']['_product_image_gallery']) as $imageId) {
-                $row['image/'][] = ['product_image_id' => $imageId, 'image' => $row['images'][$imageId], 'product_id' => $row['ID'], 'sort_order' => 0];
+
+            $relatedProducts = unserialize($row['meta']['_crosssell_ids']);
+            if (is_array($relatedProducts)) {
+                foreach ($relatedProducts as $relatedProductId) {
+                    $row['related'][] = ['product_id' => $row['ID'], 'related_id' => $relatedProductId];
+                }
             }
+
+            $productGallery = explode(',', $row['meta']['_product_image_gallery']);
+            if (is_array($productGallery)) {
+                foreach ($productGallery as $imageId) {
+                    $row['image/'][] = ['product_image_id' => $imageId, 'image' => $row['images'][$imageId], 'product_id' => $row['ID'], 'sort_order' => 0];
+                }
+            }
+
+            $row['attributes']=$productAttributes = unserialize($row['meta']['_product_attributes']);
+//            if (is_array($productAttributes)) {
+//                foreach ($productAttributes as $attribute) {
+//                    $row['image/'][] = ['product_image_id' => $imageId, 'image' => $row['images'][$imageId], 'product_id' => $row['ID'], 'sort_order' => 0];
+//                }
+//            }
 
 
             unset($row['meta']['_downloadable']);
@@ -276,6 +291,8 @@ WHERE $id = p.post_parent
             unset($row['meta']['_wc_average_rating']);
             unset($row['meta']['_wc_review_count']);
             unset($row['meta']['_wc_rating_count']);
+            unset($row['meta']['_product_attributes']);
+//            unset($row['meta']);
             unset($row['images']);
         }
     }
@@ -365,6 +382,26 @@ WHERE $where
         }
 
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    private function getImportedCategories()
+    {
+        $sql = '
+SELECT 
+c.*
+FROM oc_category c
+';
+        $stmt = $this->pdoOC->query($sql);
+        if (!$stmt) {
+            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+            return;
+        }
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($rows as $row) {
+            $this->categoriesOC[] = $row;
+        }
     }
 
     public function listAll($isCLI)
