@@ -8,12 +8,10 @@ class Migrator
     private array $productsWC = [];
     private array $categoriesWC = [];
     private array $attributeWC = [];
-    private array $tagsWC = [];
 
     private array $productsOC = [];
     private array $categoriesOC = [];
     private array $attributeOC = [];
-    private array $tagsOC = [];
 
     public function migrate($credentials)
     {
@@ -285,7 +283,7 @@ WHERE '$name' = wcat.attribute_name
 //                    $row['image/'][] = ['product_image_id' => $imageId, 'image' => $row['images'][$imageId], 'product_id' => $rowId, 'sort_order' => 0];
 //                }
 //            }
-            $this->processProductsTaxonomies($row['taxonomies'], $rowId);
+            $row['description/tags'] = $this->processProductsTaxonomies($row['taxonomies'], $rowId);
 
 
             unset($row['meta']['_downloadable']);
@@ -327,18 +325,20 @@ WHERE '$name' = wcat.attribute_name
         }
     }
 
-    private function processProductsTaxonomies(&$taxonomies, $pID)
+    private function processProductsTaxonomies($taxonomies, $pID)
     {
+        $tags = [];
         foreach ($taxonomies as &$taxonomy) {
             if ($taxonomy['taxonomy'] == 'product_cat') {
                 $this->categoriesWC[$pID][] = $taxonomy;
             } else if ($taxonomy['taxonomy'] == 'product_tag') {
-                $this->tagsWC[$pID][] = $taxonomy;
+                $tags[] = $taxonomy['name'];
             } else if (strpos($taxonomy['taxonomy'], 'pa_') === 0) {
                 $this->attributeWC[$pID][$taxonomy['taxonomy']]['value'] = $taxonomy['name'];
                 $this->attributeWC[$pID][$taxonomy['taxonomy']]['name'] = $this->getWCAttributeLabel(substr($taxonomy['taxonomy'], 3));
             }
         }
+        return implode(', ', $tags);
     }
 
 #endregion
@@ -483,15 +483,6 @@ $fromWhere
 
 
         echo $isCLI
-            ? "tags WC\n" . str_repeat("_", 10) . "\n"
-            : "<details " . (strpos($show, 't') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>tags WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
-        print_r($this->tagsWC);
-        echo $isCLI
-            ? "\n"
-            : "</pre></details>";
-
-
-        echo $isCLI
             ? "attribute WC\n" . str_repeat("_", 10) . "\n"
             : "<details " . (strpos($show, 'm') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>attribute WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->attributeWC);
@@ -514,15 +505,6 @@ $fromWhere
             ? "categories OC\n" . str_repeat("_", 10) . "\n"
             : "<details " . (strpos($show, 'c') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>categories OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->categoriesOC);
-        echo $isCLI
-            ? "\n"
-            : "</pre></details>";
-
-
-        echo $isCLI
-            ? "tags OC\n" . str_repeat("_", 10) . "\n"
-            : "<details " . (strpos($show, 't') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>tags OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
-        print_r($this->tagsOC);
         echo $isCLI
             ? "\n"
             : "</pre></details>";
