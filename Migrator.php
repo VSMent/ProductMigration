@@ -7,28 +7,28 @@ class Migrator
 
     private array $productsWC = [];
     private array $categoriesWC = [];
-    private array $product_metaWC = [];
+    private array $attributeWC = [];
     private array $tagsWC = [];
 
     private array $productsOC = [];
     private array $categoriesOC = [];
-    private array $product_metaOC = [];
+    private array $attributeOC = [];
     private array $tagsOC = [];
 
     public function migrate($credentials)
     {
         list($this->pdoWC, $this->pdoOC) = DB::initialize($credentials['wc'], $credentials['oc']);
         // Get
-        self::getProducts();
+        $this->getProducts();
 
         // Process
-        self::processProducts();
+        $this->processProducts();
 
         // Insert
 
 
         // Check
-        self::getImportedProducts();
+        $this->getImportedProducts();
     }
 
 #region GET_DATA
@@ -215,6 +215,23 @@ WHERE $id = p.post_parent
     // TODO GET CATEGORY PARENT(S)
     // TODO GET CATEGORY IMAGE
 
+    private function getWCAttributeLabel($name)
+    {
+        $sql = "
+SELECT attribute_label
+FROM wp_woocommerce_attribute_taxonomies wcat
+WHERE '$name' = wcat.attribute_name
+";
+        $stmt = $this->pdoWC->query($sql);
+        if (!$stmt) {
+            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+            return false;
+        }
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        return $rows[0]['attribute_label'];
+    }
+
 #endregion
 
 #region PROCESS_DATA
@@ -250,12 +267,13 @@ WHERE $id = p.post_parent
                 }
             }
 
-            $row['attributes'] = $productAttributes = unserialize($row['meta']['_product_attributes']);
+            $this->attributeWC[$row['ID']] = unserialize($row['meta']['_product_attributes']);
 //            if (is_array($productAttributes)) {
 //                foreach ($productAttributes as $attribute) {
 //                    $row['image/'][] = ['product_image_id' => $imageId, 'image' => $row['images'][$imageId], 'product_id' => $row['ID'], 'sort_order' => 0];
 //                }
 //            }
+            $this->processProductsTaxonomies($row['taxonomies'], $row['ID']);
 
 
             unset($row['meta']['_downloadable']);
@@ -293,6 +311,21 @@ WHERE $id = p.post_parent
             unset($row['meta']['_product_attributes']);
 //            unset($row['meta']);
             unset($row['images']);
+            unset($row['taxonomies']);
+        }
+    }
+
+    private function processProductsTaxonomies(&$taxonomies, $pID)
+    {
+        foreach ($taxonomies as &$taxonomy) {
+            if ($taxonomy['taxonomy'] == 'product_cat') {
+                $this->categoriesWC[] = $taxonomy;
+            } else if ($taxonomy['taxonomy'] == 'product_tag') {
+                $this->tagsWC[] = $taxonomy;
+            } else if (strpos($taxonomy['taxonomy'], 'pa_') === 0) {
+                $this->attributeWC[$pID][$taxonomy['taxonomy']]['value'] = $taxonomy['name'];
+                $this->attributeWC[$pID][$taxonomy['taxonomy']]['name'] = $this->getWCAttributeLabel(substr($taxonomy['taxonomy'], 3));
+            }
         }
     }
 
@@ -408,7 +441,7 @@ $fromWhere
         foreach ($rows as $row) {
             $this->categoriesOC[] = $row;
             if ($row['parent_id'] != 0) {
-                self::getImportedCategories($row['parent_id'], false);
+                $this->getImportedCategories($row['parent_id'], false);
             }
         }
     }
@@ -418,7 +451,7 @@ $fromWhere
         #region WC
         echo $isCLI
             ? "products WC\n" . str_repeat("_", 10) . "\n"
-            : "<div style='width: 49%; display: inline-block; margin-right: 2%;'><details " . (strpos($show, 'p') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>products WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+            : "<div style='width: 49%; display: inline-block; margin-right: 2%;'><details " . (strpos($show, 'p') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>products WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->productsWC);
         echo $isCLI
             ? "\n"
@@ -427,7 +460,7 @@ $fromWhere
 
         echo $isCLI
             ? "categories WC\n" . str_repeat("_", 10) . "\n"
-            : "<details " . (strpos($show, 'c') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>categories WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+            : "<details " . (strpos($show, 'c') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>categories WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->categoriesWC);
         echo $isCLI
             ? "\n"
@@ -436,7 +469,7 @@ $fromWhere
 
         echo $isCLI
             ? "tags WC\n" . str_repeat("_", 10) . "\n"
-            : "<details " . (strpos($show, 't') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>tags WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+            : "<details " . (strpos($show, 't') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>tags WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->tagsWC);
         echo $isCLI
             ? "\n"
@@ -444,9 +477,9 @@ $fromWhere
 
 
         echo $isCLI
-            ? "product_meta WC\n" . str_repeat("_", 10) . "\n"
-            : "<details " . (strpos($show, 'm') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>product_meta WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
-        print_r($this->product_metaWC);
+            ? "attribute WC\n" . str_repeat("_", 10) . "\n"
+            : "<details " . (strpos($show, 'm') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>attribute WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+        print_r($this->attributeWC);
         echo $isCLI
             ? "\n"
             : "</pre></details></div>";
@@ -455,7 +488,7 @@ $fromWhere
         #region OC
         echo $isCLI
             ? "products OC\n" . str_repeat("_", 10) . "\n"
-            : "<div style='width: 49%; display: inline-block;float:right;'><details " . (strpos($show, 'p') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>products OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+            : "<div style='width: 49%; display: inline-block;float:right;'><details " . (strpos($show, 'p') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>products OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->productsOC);
         echo $isCLI
             ? "\n"
@@ -464,7 +497,7 @@ $fromWhere
 
         echo $isCLI
             ? "categories OC\n" . str_repeat("_", 10) . "\n"
-            : "<details " . (strpos($show, 'c') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>categories OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+            : "<details " . (strpos($show, 'c') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>categories OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->categoriesOC);
         echo $isCLI
             ? "\n"
@@ -473,7 +506,7 @@ $fromWhere
 
         echo $isCLI
             ? "tags OC\n" . str_repeat("_", 10) . "\n"
-            : "<details " . (strpos($show, 't') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>tags OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+            : "<details " . (strpos($show, 't') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>tags OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->tagsOC);
         echo $isCLI
             ? "\n"
@@ -481,9 +514,9 @@ $fromWhere
 
 
         echo $isCLI
-            ? "product_meta OC\n" . str_repeat("_", 10) . "\n"
-            : "<details " . (strpos($show, 'm') !== false|| strpos($show, 'a') !== false? 'open' : '') . "><summary>product_meta OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
-        print_r($this->product_metaOC);
+            ? "attribute OC\n" . str_repeat("_", 10) . "\n"
+            : "<details " . (strpos($show, 'm') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>attribute OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+        print_r($this->attributeOC);
         echo $isCLI
             ? "\n"
             : "</pre></details></div>";
