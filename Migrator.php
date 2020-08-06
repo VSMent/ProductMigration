@@ -287,6 +287,7 @@ WHERE '$name' = wcat.attribute_name
 //            }
             $row['description/tags'] = $this->processProductsTaxonomies($row['taxonomies'], $rowId);
             $this->reviewWC[$rowId] = $row['review'];
+            $this->processProductsAttributes($rowId);
 
 
             unset($row['meta']['_downloadable']);
@@ -325,6 +326,7 @@ WHERE '$name' = wcat.attribute_name
 //            unset($row['meta']);
             unset($row['images']);
             unset($row['taxonomies']);
+            unset($row['review']);
         }
     }
 
@@ -342,6 +344,27 @@ WHERE '$name' = wcat.attribute_name
             }
         }
         return implode(', ', $tags);
+    }
+
+    private function processProductsAttributes($pId)
+    {
+        $i = 0;
+        foreach ($this->attributeWC[$pId] as $k => $attribute) {
+            $attribute['ad_name'] = $attribute['name'];
+            $attribute['pa_text'] = $attribute['value'];
+            $attribute['adg_name'] = 'Attributes';
+
+            unset($attribute['name']);
+            unset($attribute['value']);
+            unset($attribute['position']);
+            unset($attribute['is_visible']);
+            unset($attribute['is_variation']);
+            unset($attribute['is_taxonomy']);
+
+            unset($this->attributeWC[$pId][$k]);
+            $this->attributeWC[$pId][$i] = $attribute;
+            $i++;
+        }
     }
 
 
@@ -395,6 +418,7 @@ WHERE product_id = 51
             $row['_to_store'] = $this->getIPTables($row['product_id'], $prefix . 'to_store');
             $this->getImportedCategories($row['product_id']);
             $this->getImportedReviews($row['product_id']);
+            $this->getImportedAttributes($row['product_id']);
 
             unset($row['upc']);
             unset($row['ean']);
@@ -465,7 +489,7 @@ $fromWhere
         $this->categoriesOC[$id] = $rows;
     }
 
-    private function getImportedReviews($id, $isProductId = true)
+    private function getImportedReviews($id)
     {
         $sql = "
 SELECT 
@@ -483,6 +507,46 @@ WHERE product_id = $id
 
 
         $this->reviewOC[$id] = $rows;
+    }
+
+    private function getImportedAttributes($id)
+    {
+        $sql = "
+SELECT 
+a.attribute_id
+,a.attribute_group_id
+,ad.name as ad_name
+,agd.name as adg_name
+,pa.text as pa_text 
+FROM
+oc_attribute a
+,oc_attribute_description ad
+,oc_attribute_group ag
+,oc_attribute_group_description agd
+,oc_product_attribute pa
+WHERE a.attribute_id = ad.attribute_id
+  AND a.attribute_group_id = agd.attribute_group_id
+  AND a.attribute_id = pa.attribute_id
+  AND a.attribute_group_id = ag.attribute_group_id
+  AND pa.product_id = $id
+";
+        $stmt = $this->pdoOC->query($sql);
+        if (!$stmt) {
+            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+            return;
+        }
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+//        foreach ($rows as $row) {
+//            if ($row['parent_id'] != 0) {
+//                $rows[] = $this->getImportedCategories($row['parent_id'], false);
+//            }
+//        }
+//        if (!$isProductId) {
+//            return $rows[0];
+//        }
+        $this->attributeOC[$id] = $rows;
     }
 
     public function listAll($isCLI, $show = 'a')
