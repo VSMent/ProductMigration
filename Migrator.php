@@ -8,10 +8,12 @@ class Migrator
     private array $productsWC = [];
     private array $categoriesWC = [];
     private array $attributeWC = [];
+    private array $reviewWC = [];
 
     private array $productsOC = [];
     private array $categoriesOC = [];
     private array $attributeOC = [];
+    private array $reviewOC = [];
 
     public function migrate($credentials)
     {
@@ -284,6 +286,7 @@ WHERE '$name' = wcat.attribute_name
 //                }
 //            }
             $row['description/tags'] = $this->processProductsTaxonomies($row['taxonomies'], $rowId);
+            $this->reviewWC[$rowId] = $row['review'];
 
 
             unset($row['meta']['_downloadable']);
@@ -328,7 +331,7 @@ WHERE '$name' = wcat.attribute_name
     private function processProductsTaxonomies($taxonomies, $pID)
     {
         $tags = [];
-        foreach ($taxonomies as &$taxonomy) {
+        foreach ($taxonomies as $taxonomy) {
             if ($taxonomy['taxonomy'] == 'product_cat') {
                 $this->categoriesWC[$pID][] = $taxonomy;
             } else if ($taxonomy['taxonomy'] == 'product_tag') {
@@ -340,6 +343,7 @@ WHERE '$name' = wcat.attribute_name
         }
         return implode(', ', $tags);
     }
+
 
 #endregion
 
@@ -374,7 +378,6 @@ WHERE product_id = 51
         $prefix = 'oc_product_';
         foreach ($rows as $row) {
 //            $row['manufacturer'] = $this->getIPTables($row['manufacturer_id'], 'oc_manufacturer', '*', 't.manufacturer_id = $id');
-            $row['_review'] = $this->getIPTables($row['product_id'], 'oc_review');
             $row['_attribute'] = $this->getIPTables($row['product_id'], $prefix . 'attribute');
             $row['_description'] = $this->getIPTables($row['product_id'], $prefix . 'description');
             $row['_discount'] = $this->getIPTables($row['product_id'], $prefix . 'discount');
@@ -391,6 +394,7 @@ WHERE product_id = 51
             $row['_to_layout'] = $this->getIPTables($row['product_id'], $prefix . 'to_layout');
             $row['_to_store'] = $this->getIPTables($row['product_id'], $prefix . 'to_store');
             $this->getImportedCategories($row['product_id']);
+            $this->getImportedReviews($row['product_id']);
 
             unset($row['upc']);
             unset($row['ean']);
@@ -461,6 +465,26 @@ $fromWhere
         $this->categoriesOC[$id] = $rows;
     }
 
+    private function getImportedReviews($id, $isProductId = true)
+    {
+        $sql = "
+SELECT 
+*
+FROM oc_review r
+WHERE product_id = $id
+";
+        $stmt = $this->pdoOC->query($sql);
+        if (!$stmt) {
+            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+            return;
+        }
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+
+        $this->reviewOC[$id] = $rows;
+    }
+
     public function listAll($isCLI, $show = 'a')
     {
         #region WC
@@ -477,6 +501,15 @@ $fromWhere
             ? "categories WC\n" . str_repeat("_", 10) . "\n"
             : "<details " . (strpos($show, 'c') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>categories WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->categoriesWC);
+        echo $isCLI
+            ? "\n"
+            : "</pre></details>";
+
+
+        echo $isCLI
+            ? "review WC\n" . str_repeat("_", 10) . "\n"
+            : "<details " . (strpos($show, 'r') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>review WC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+        print_r($this->reviewWC);
         echo $isCLI
             ? "\n"
             : "</pre></details>";
@@ -505,6 +538,15 @@ $fromWhere
             ? "categories OC\n" . str_repeat("_", 10) . "\n"
             : "<details " . (strpos($show, 'c') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>categories OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
         print_r($this->categoriesOC);
+        echo $isCLI
+            ? "\n"
+            : "</pre></details>";
+
+
+        echo $isCLI
+            ? "review OC\n" . str_repeat("_", 10) . "\n"
+            : "<details " . (strpos($show, 'r') !== false || strpos($show, 'a') !== false ? 'open' : '') . "><summary>review OC</summary><hr/><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+        print_r($this->reviewOC);
         echo $isCLI
             ? "\n"
             : "</pre></details>";
