@@ -19,9 +19,11 @@ class Migrator
 
     private string $manufacturerName = "Migrated from WooCommerce";
     private string $attributeGroupName = "Attributes";
+    private string $reviewAuthorName = "Reviewer";
     private int $layoutId = 0;
     private int $storeId = 0;
     private int $defaultLanguage = 1;
+    private int $reviewUserId = 0;
 
     public function migrate($credentials)
     {
@@ -33,12 +35,7 @@ class Migrator
         $this->processProducts();
 
         // Insert
-        $productId = 11;
-        $this->InsertManufacturerIfNotExists();
-        $this->InsertProduct($productId);
-        $this->InsertAttributesGroupIfNotExists();
-        $this->InsertProductAttributesIfNotExists($productId);
-        $this->InsertProductCategoriesIfNotExists($productId);
+        $this->InsertProducts();
 
         // Check
         $this->getImportedProducts();
@@ -123,9 +120,10 @@ AND c.comment_type = 'review'
         }
 
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        foreach ($rows as &$row) {
-//            $row['customer_id'] = 0;
-            $row += $this->getReviewMeta($row['review_id']);
+        foreach ($rows as $k => $row) {
+            $rows[$row['review_id']] = $row;
+            $rows[$row['review_id']] += $this->getReviewMeta($row['review_id']);
+            unset($rows[$k]);
         }
         return $rows;
     }
@@ -476,8 +474,18 @@ VALUES (
         $this->importedIds['manufacturer'] = $id;
     }
 
-    private function InsertProduct($pID)
+    private function InsertProducts()
     {
+//        foreach ($this->productsWC as $product) {
+//            $pID = $product['product_id'];
+        $pID = 11;
+        $this->InsertManufacturerIfNotExists();
+        $this->InsertAttributesGroupIfNotExists();
+        $this->InsertProductAttributesIfNotExists($pID);
+        $this->InsertProductCategoriesIfNotExists($pID);
+        $this->InsertIntoProduct_Tables($pID);
+        $this->InsertIntoProduct_to_Tables($pID);
+
         $sql = '
 INSERT INTO oc_product (
 isbn,
@@ -542,7 +550,10 @@ VALUES (
             return;
         }
 
-        $this->importedIds['products'] = [$pID => $this->pdoOC->lastInsertId()];
+        $this->importedIds['products'][$pID] = $this->pdoOC->lastInsertId();
+
+        $this->InsertProductReviews($pID);
+//        }
     }
 
     private function InsertAttributesGroupIfNotExists()
@@ -647,6 +658,7 @@ VALUES (
     private function InsertProductCategoriesIfNotExists($pID)
     {
         foreach (array_reverse($this->categoriesWC[$pID]) as $category) {
+            $newCategory = false;
 // get from db if exists
             $sql = "
 SELECT category_id
@@ -663,6 +675,7 @@ LIMIT 1
             $id = $stmt->fetchAll(PDO::FETCH_COLUMN)[0];
 
             if (!isset($id) || !is_numeric($id)) {
+                $newCategory = true;
                 // Insert new one
                 $parent_id = $category['parent'] == 0
                     ? 0
@@ -717,40 +730,41 @@ VALUES (
             }
             // save
             $this->importedIds['categories'][$pID][$category['term_id']] = $id;
-            // add paths
-            $categoryPaths = $this->getCategoryPaths($pID, $category['term_id']);
-            $valuesArr = [];
-            foreach ($categoryPaths as $categoryPath) {
-                $valuesArr[] = '(' . implode(', ', $categoryPath) . ')';
-            }
-            $values = implode(',', $valuesArr);
-            $sql = "
+            if ($newCategory) {
+                // add paths
+                $categoryPaths = $this->getCategoryPaths($pID, $category['term_id']);
+                $valuesArr = [];
+                foreach ($categoryPaths as $categoryPath) {
+                    $valuesArr[] = '(' . implode(', ', $categoryPath) . ')';
+                }
+                $values = implode(',', $valuesArr);
+                $sql = "
 INSERT INTO oc_category_path 
 VALUES $values;
 ";
-            $stmt = $this->pdoOC->query($sql);
-            if (!$stmt) {
-                print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
-                return;
-            }
+                $stmt = $this->pdoOC->query($sql);
+                if (!$stmt) {
+                    print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                    return;
+                }
 
-            // add to store
-            $sql = '
+                // add to store
+                $sql = '
 INSERT INTO oc_category_to_store 
 VALUES (
 ' . $id . ',
 ' . $this->storeId . '
 );
 ';
-            $stmt = $this->pdoOC->query($sql);
-            if (!$stmt) {
-                print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
-                return;
-            }
-        }
+                $stmt = $this->pdoOC->query($sql);
+                if (!$stmt) {
+                    print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                    return;
+                }
 
-        // add to layout
-        $sql = '
+
+                // add to layout
+                $sql = '
 INSERT INTO oc_category_to_layout 
 VALUES (
 ' . $id . ',
@@ -758,11 +772,52 @@ VALUES (
 ' . $this->layoutId . '
 );
 ';
-        $stmt = $this->pdoOC->query($sql);
-        if (!$stmt) {
-            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
-            return;
+                $stmt = $this->pdoOC->query($sql);
+                if (!$stmt) {
+                    print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                    return;
+                }
+            }
         }
+    }
+
+    private function InsertProductReviews($pID)
+    {
+        foreach ($this->reviewWC[$pID] as $review) {
+            $sql = '
+INSERT INTO oc_review (
+author, rating, date_added, date_modified, product_id, text, customer_id, status
+)
+VALUES (
+\'' . $this->reviewAuthorName . '\',
+\'' . $review['rating'] . '\',
+\'' . date('Y-m-d H:i:s') . '\',
+\'' . date('Y-m-d H:i:s') . '\',
+\'' . $this->importedIds['products'][$pID] . '\',
+\'' . $review['text'] . '\',
+\'' . $this->reviewUserId . '\',
+\'' . 1 . '\'
+);
+';
+            echo $sql;
+            $stmt = $this->pdoOC->query($sql);
+            if (!$stmt) {
+                print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                return;
+            }
+            // save
+            $this->importedIds['reviews'][$pID][$review['review_id']] = $this->pdoOC->lastInsertId();
+        }
+    }
+
+    private function InsertIntoProduct_to_Tables($pID)
+    {
+        return $pID;
+    }
+
+    private function InsertIntoProduct_Tables($pID)
+    {
+        return $pID;
     }
 
 
@@ -776,7 +831,7 @@ VALUES (
 // TODO Product_to_layout
 // TODO Product_to_store
 //
-// TODO review
+// DONE review
 //
 // DONE Catgeory
 // DONE Catgeory_description
