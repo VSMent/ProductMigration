@@ -817,6 +817,15 @@ WHERE a.attribute_id = ad.attribute_id
 
     public function listAll($isCLI, $show = 'a')
     {
+
+        echo $isCLI
+            ? "Imported IDs\n" . str_repeat("_", 10) . "\n"
+            : "<div style='font-size: 10px;'><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
+        print_r($this->importedIds);
+        echo $isCLI
+            ? "\n"
+            : "</pre></div>";
+
         #region WC
         echo $isCLI
             ? "products WC\n" . str_repeat("_", 10) . "\n"
