@@ -38,6 +38,7 @@ class Migrator
         $this->InsertProduct($productId);
         $this->InsertAttributesGroupIfNotExists();
         $this->InsertProductAttributesIfNotExists($productId);
+        $this->InsertProductCategoriesIfNotExists($productId);
 
         // Check
         $this->getImportedProducts();
@@ -362,7 +363,7 @@ WHERE '$name' = wcat.attribute_name
                 }
                 unset($taxonomy['/meta/thumbnail_id']);
                 unset($taxonomy['slug']);
-                $this->categoriesWC[$pID][] = $taxonomy;
+                $this->categoriesWC[$pID][$taxonomy['term_id']] = $taxonomy;
             } else if ($taxonomy['taxonomy'] == 'product_tag') {
                 $tags[] = $taxonomy['name'];
             } else if (strpos($taxonomy['taxonomy'], 'pa_') === 0) {
@@ -373,10 +374,10 @@ WHERE '$name' = wcat.attribute_name
         return implode(', ', $tags);
     }
 
-    private function processProductsAttributes($pId)
+    private function processProductsAttributes($pID)
     {
         $i = 0;
-        foreach ($this->attributeWC[$pId] as $k => $attribute) {
+        foreach ($this->attributeWC[$pID] as $k => $attribute) {
             $attribute['ad_name'] = $attribute['name'];
             $attribute['pa_text'] = $attribute['value'];
 
@@ -387,9 +388,37 @@ WHERE '$name' = wcat.attribute_name
             unset($attribute['is_variation']);
             unset($attribute['is_taxonomy']);
 
-            unset($this->attributeWC[$pId][$k]);
-            $this->attributeWC[$pId][$i] = $attribute;
+            unset($this->attributeWC[$pID][$k]);
+            $this->attributeWC[$pID][$i] = $attribute;
             $i++;
+        }
+    }
+
+    private function getCategoryPaths($pID, $id, $currentId = null)
+    {
+        $parent_id = $this->categoriesWC[$pID][$id]['parent'];
+        if ($parent_id == 0) {
+            return [
+                [
+                    $currentId
+                        ? $this->importedIds['categories'][$pID][$currentId]
+                        : $this->importedIds['categories'][$pID][$id],
+                    $this->importedIds['categories'][$pID][$id],
+                    0
+                ]
+            ];
+        } else {
+            $parentPaths = $this->getCategoryPaths($pID, $parent_id, $id);
+            array_unshift($parentPaths,
+                [
+                    $currentId
+                        ? $this->importedIds['categories'][$pID][$currentId]
+                        : $this->importedIds['categories'][$pID][$id],
+                    $this->importedIds['categories'][$pID][$id],
+                    $parentPaths[0][2] + 1
+                ]
+            );
+            return $parentPaths;
         }
     }
 
@@ -424,7 +453,7 @@ name
 )
 VALUES (
 0,
-"' . $this->manufacturerName . '"
+\'' . $this->manufacturerName . '\'
 );
 ';
             $stmt = $this->pdoOC->query($sql);
@@ -447,7 +476,7 @@ VALUES (
         $this->importedIds['manufacturer'] = $id;
     }
 
-    private function InsertProduct($pId)
+    private function InsertProduct($pID)
     {
         $sql = '
 INSERT INTO oc_product (
@@ -479,32 +508,32 @@ height,
 length_class_id
 )
 VALUES (
-"",
-"' . $this->productsWC[$pId]['description/name'] . '",
+\'\',
+\'' . $this->productsWC[$pID]['description/name'] . '\',
 6,
-"' . $this->importedIds['manufacturer'] . '", 
-"",
-"' . $this->productsWC[$pId]['sku'] . '",
-"",
-"' . $this->productsWC[$pId]['date_added'] . '",
-"",
-"",
-"",
-"' . $this->productsWC[$pId]['tax_class_id'] . '",
-"' . $this->productsWC[$pId]['date_modified'] . '",
+\'' . $this->importedIds['manufacturer'] . '\', 
+\'\',
+\'' . $this->productsWC[$pID]['sku'] . '\',
+\'\',
+\'' . $this->productsWC[$pID]['date_added'] . '\',
+\'\',
+\'\',
+\'\',
+\'' . $this->productsWC[$pID]['tax_class_id'] . '\',
+\'' . $this->productsWC[$pID]['date_modified'] . '\',
 
-"' . $this->productsWC[$pId]['sort_order'] . '",
-"' . $this->productsWC[$pId]['status'] . '",
-"' . $this->productsWC[$pId]['quantity'] . '",
-"' . $this->productsWC[$pId]['image'] . '",
-"' . $this->productsWC[$pId]['price'] . '",
-"' . $this->productsWC[$pId]['date_added'] . '",
-"' . $this->productsWC[$pId]['weight'] . '",
-"' . $this->productsWC[$pId]['weight_class_id'] . '",
-"' . $this->productsWC[$pId]['length'] . '",
-"' . $this->productsWC[$pId]['width'] . '",
-"' . $this->productsWC[$pId]['height'] . '",
-"' . $this->productsWC[$pId]['length_class_id'] . '"
+\'' . $this->productsWC[$pID]['sort_order'] . '\',
+\'' . $this->productsWC[$pID]['status'] . '\',
+\'' . $this->productsWC[$pID]['quantity'] . '\',
+\'' . $this->productsWC[$pID]['image'] . '\',
+\'' . $this->productsWC[$pID]['price'] . '\',
+\'' . $this->productsWC[$pID]['date_added'] . '\',
+\'' . $this->productsWC[$pID]['weight'] . '\',
+\'' . $this->productsWC[$pID]['weight_class_id'] . '\',
+\'' . $this->productsWC[$pID]['length'] . '\',
+\'' . $this->productsWC[$pID]['width'] . '\',
+\'' . $this->productsWC[$pID]['height'] . '\',
+\'' . $this->productsWC[$pID]['length_class_id'] . '\'
 );
 ';
         $stmt = $this->pdoOC->query($sql);
@@ -513,7 +542,7 @@ VALUES (
             return;
         }
 
-        $this->importedIds['products'] = [$pId => $this->pdoOC->lastInsertId()];
+        $this->importedIds['products'] = [$pID => $this->pdoOC->lastInsertId()];
     }
 
     private function InsertAttributesGroupIfNotExists()
@@ -551,7 +580,7 @@ INSERT INTO oc_attribute_group_description
 VALUES (
 ' . $id . ',
 ' . $this->defaultLanguage . ',
-"' . $this->attributeGroupName . '"
+\'' . $this->attributeGroupName . '\'
 );
 ';
             $stmt = $this->pdoOC->query($sql);
@@ -564,9 +593,9 @@ VALUES (
         $this->importedIds['attribute_group'] = $id;
     }
 
-    private function InsertProductAttributesIfNotExists($pId)
+    private function InsertProductAttributesIfNotExists($pID)
     {
-        foreach ($this->attributeWC[$pId] as $attribute) {
+        foreach ($this->attributeWC[$pID] as $attribute) {
 // get from db if exists
             $sql = "
 SELECT attribute_id
@@ -601,7 +630,7 @@ INSERT INTO oc_attribute_description
 VALUES (
 ' . $id . ',
 ' . $this->defaultLanguage . ',
-"' . $attribute['ad_name'] . '"
+\'' . $attribute['ad_name'] . '\'
 );
 ';
                 $stmt = $this->pdoOC->query($sql);
@@ -611,9 +640,132 @@ VALUES (
                 }
             }
             // save
-            $this->importedIds['attributes'][$pId][] = $id;
+            $this->importedIds['attributes'][$pID][] = $id;
         }
     }
+
+    private function InsertProductCategoriesIfNotExists($pID)
+    {
+        foreach (array_reverse($this->categoriesWC[$pID]) as $category) {
+// get from db if exists
+            $sql = "
+SELECT category_id
+FROM oc_category_description
+WHERE name = '" . $category['name'] . "'
+LIMIT 1
+;
+";
+            $stmt = $this->pdoOC->query($sql);
+            if (!$stmt) {
+                print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                return;
+            }
+            $id = $stmt->fetchAll(PDO::FETCH_COLUMN)[0];
+
+            if (!isset($id) || !is_numeric($id)) {
+                // Insert new one
+                $parent_id = $category['parent'] == 0
+                    ? 0
+                    : $this->importedIds['categories'][$pID][$category['parent']];
+                $sql = '
+INSERT INTO oc_category (
+status
+, date_added
+, date_modified
+, `column`
+, top
+
+, image
+, parent_id
+) 
+VALUES (
+1
+, \'' . date('Y-m-d H:i:s') . '\'
+, \'' . date('Y-m-d H:i:s') . '\'
+, 0
+, 0
+
+, \'' . $category['image'] . '\'
+, ' . $parent_id . '
+);
+';
+                $stmt = $this->pdoOC->query($sql);
+                if (!$stmt) {
+                    print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                    return;
+                }
+
+                $id = $this->pdoOC->lastInsertId();
+
+                $sql = '
+INSERT INTO oc_category_description 
+VALUES (
+' . $id . ',
+' . $this->defaultLanguage . ',
+\'' . $category['name'] . '\',
+\'\',
+\'' . $category['name'] . '\',
+\'\',
+\'\'
+);
+';
+                $stmt = $this->pdoOC->query($sql);
+                if (!$stmt) {
+                    print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                    return;
+                }
+            }
+            // save
+            $this->importedIds['categories'][$pID][$category['term_id']] = $id;
+            // add paths
+            $categoryPaths = $this->getCategoryPaths($pID, $category['term_id']);
+            $valuesArr = [];
+            foreach ($categoryPaths as $categoryPath) {
+                $valuesArr[] = '(' . implode(', ', $categoryPath) . ')';
+            }
+            $values = implode(',', $valuesArr);
+            $sql = "
+INSERT INTO oc_category_path 
+VALUES $values;
+";
+            $stmt = $this->pdoOC->query($sql);
+            if (!$stmt) {
+                print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                return;
+            }
+
+            // add to store
+            $sql = '
+INSERT INTO oc_category_to_store 
+VALUES (
+' . $id . ',
+' . $this->storeId . '
+);
+';
+            $stmt = $this->pdoOC->query($sql);
+            if (!$stmt) {
+                print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                return;
+            }
+        }
+
+        // add to layout
+        $sql = '
+INSERT INTO oc_category_to_layout 
+VALUES (
+' . $id . ',
+' . $this->storeId . ',
+' . $this->layoutId . '
+);
+';
+        $stmt = $this->pdoOC->query($sql);
+        if (!$stmt) {
+            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+            return;
+        }
+    }
+
+
 
 // DONE Product
 // TODO Product_attribute
@@ -626,10 +778,11 @@ VALUES (
 //
 // TODO review
 //
-// TODO Catgeory
-// TODO Catgeory_description
-// TODO Catgeory_to_layout
-// TODO Catgeory_to_store
+// DONE Catgeory
+// DONE Catgeory_description
+// DONE Catgeory_path
+// DONE Catgeory_to_layout
+// DONE Catgeory_to_store
 //
 // DONE Attribute
 // DONE Attribute_description
@@ -638,6 +791,8 @@ VALUES (
 //
 // DONE Manufacturer
 // DONE Manufacturer_to_store
+
+// TODO Move images
 #endregion
 
 #region SHOW_RESULT
@@ -906,6 +1061,7 @@ WHERE a.attribute_id = ad.attribute_id
 
 // TODO table prefix
 // TODO phpDoc
+// TODO Refactor
 }
 
 
