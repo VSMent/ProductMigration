@@ -46,24 +46,4 @@ class DB
 
         return [self::$pdo1, self::$pdo2];
     }
-
-    /**
-     * Check if database connection has been created
-     *
-     * @return bool
-     */
-    public static function isDbConnected()
-    {
-        return self::$pdo !== null;
-    }
-
-    /**
-     * Get the PDO object of the connected database
-     *
-     * @return PDO
-     */
-    public static function getPdo()
-    {
-        return self::$pdo;
-    }
 }

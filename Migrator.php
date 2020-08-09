@@ -25,18 +25,19 @@ class Migrator
         $this->processProducts();
 
         // Insert
-
+        $this->InsertProduct(11);
 
         // Check
         $this->getImportedProducts();
     }
 
 #region GET_DATA
+
     private function getProducts()
     {
         $sql = '
 SELECT 
-p.ID, 
+p.ID as product_id, 
 p.post_date as date_added, 
 p.post_modified as date_modified,
 p.menu_order as sort_order,
@@ -57,11 +58,11 @@ AND post_status <> \'auto-draft\'
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($rows as $row) {
-            $row['meta'] = $this->getProductMeta($row['ID']);
-            $row['review'] = $this->getProductReview($row['ID']);
-            $row['taxonomies'] = $this->getTaxonomies($row['ID']);
-            $row['images'] = $this->getImages($row['ID']);
-            $this->productsWC[$row['ID']] = $row;
+            $row['meta'] = $this->getProductMeta($row['product_id']);
+            $row['review'] = $this->getProductReview($row['product_id']);
+            $row['taxonomies'] = $this->getTaxonomies($row['product_id']);
+            $row['images'] = $this->getImages($row['product_id']);
+            $this->productsWC[$row['product_id']] = $row;
         }
     }
 
@@ -261,7 +262,7 @@ WHERE '$name' = wcat.attribute_name
             $row['weight'] = $row['meta']['_weight'];
             $row['length_class_id'] = 1; // CM
             $row['length'] = $row['meta']['_length'];
-            $row['weight'] = $row['meta']['_width'];
+            $row['width'] = $row['meta']['_width'];
             $row['height'] = $row['meta']['_height'];
             $row['subtract'] = 1;
             $row['image'] = $row['images'][$row['meta']['_thumbnail_id']];
@@ -324,7 +325,7 @@ WHERE '$name' = wcat.attribute_name
             unset($row['meta']['_wc_review_count']);
             unset($row['meta']['_wc_rating_count']);
             unset($row['meta']['_product_attributes']);
-//            unset($row['meta']);
+            unset($row['meta']);
             unset($row['images']);
             unset($row['taxonomies']);
             unset($row['review']);
@@ -381,11 +382,113 @@ WHERE '$name' = wcat.attribute_name
         }
     }
 
+    // TODO find discount info
 
 #endregion
 
 #region INSERT_DATA
 
+    private function InsertProduct($id)
+    {
+        $sql = '
+INSERT INTO oc_product (
+isbn,
+model,
+stock_status_id,
+manufacturer_id,
+mpn,
+sku,
+location,
+date_added,
+upc,
+ean,
+jan,
+tax_class_id,
+date_modified,
+
+sort_order,
+status,
+quantity,
+image,
+price,
+date_available,
+weight,
+weight_class_id,
+length,
+width,
+height,
+length_class_id
+)
+VALUES (
+"",
+"'. $this->productsWC[$id]['description/name'] . '",
+6,
+0, 
+"",
+"'. $this->productsWC[$id]['sku'] . '",
+"",
+"'. $this->productsWC[$id]['date_added'] . '",
+"",
+"",
+"",
+"'. $this->productsWC[$id]['tax_class_id'] . '",
+"'. $this->productsWC[$id]['date_modified'] . '",
+
+"'. $this->productsWC[$id]['sort_order'] . '",
+"'. $this->productsWC[$id]['status'] . '",
+"'. $this->productsWC[$id]['quantity'] . '",
+"'. $this->productsWC[$id]['image'] . '",
+"'. $this->productsWC[$id]['price'] . '",
+"'. $this->productsWC[$id]['date_added'] . '",
+"'. $this->productsWC[$id]['weight'] . '",
+"'. $this->productsWC[$id]['weight_class_id'] . '",
+"'. $this->productsWC[$id]['length'] . '",
+"'. $this->productsWC[$id]['width'] . '",
+"'. $this->productsWC[$id]['height'] . '",
+"'. $this->productsWC[$id]['length_class_id'] . '"
+);
+';
+//        echo $sql;
+        $stmt = $this->pdoOC->query($sql);
+        if (!$stmt) {
+            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+            return;
+        }
+
+        print($this->pdoOC->lastInsertId());
+//
+//    foreach ($rows as $row) {
+//        $row['meta'] = $this->getProductMeta($row['ID']);
+//        $row['review'] = $this->getProductReview($row['ID']);
+//        $row['taxonomies'] = $this->getTaxonomies($row['ID']);
+//        $row['images'] = $this->getImages($row['ID']);
+//        $this->productsWC[$row['ID']] = $row;
+//    }
+    }
+
+/// Product
+/// Product_attribute
+/// Product_description
+/// Product_image
+/// Product_related
+/// Product_to_category
+/// Product_to_layout
+/// Product_to_store
+///
+/// review
+///
+/// Catgeory
+/// Catgeory_description
+/// Catgeory_to_layout
+/// Catgeory_to_store
+///
+/// Attribute
+/// Attribute_description
+/// Attribute_group
+/// Attribute_grpup_description
+///
+/// Manufacturer
+/// Manufacturer_to_store
 #endregion
 
 #region SHOW_RESULT
@@ -417,7 +520,7 @@ WHERE product_id = 51
 //            $row['manufacturer'] = $this->getIPTables($row['manufacturer_id'], 'oc_manufacturer', '*', 't.manufacturer_id = $id');
 //            $row['_attribute'] = $this->getIPTables($row['product_id'], $prefix . 'attribute');
             $row['_description'] = $this->getIPTables($row['product_id'], $prefix . 'description');
-            $row['_discount'] = $this->getIPTables($row['product_id'], $prefix . 'discount');
+//            $row['_discount'] = $this->getIPTables($row['product_id'], $prefix . 'discount');
 //            $row['_filter'] = $this->getIPTables($row['product_id'], $prefix . 'filter');
             $row['_image'] = $this->getIPTables($row['product_id'], $prefix . 'image');
 //            $row['_option'] = $this->getIPTables($row['product_id'], $prefix . 'option');
@@ -425,7 +528,7 @@ WHERE product_id = 51
 //            $row['_recurring'] = $this->getIPTables($row['product_id'], $prefix . 'recurring');
             $row['_related'] = $this->getIPTables($row['product_id'], $prefix . 'related');
 //            $row['_reward'] = $this->getIPTables($row['product_id'], $prefix . 'reward');
-            $row['_special'] = $this->getIPTables($row['product_id'], $prefix . 'special');
+//            $row['_special'] = $this->getIPTables($row['product_id'], $prefix . 'special');
             $row['_to_category'] = $this->getIPTables($row['product_id'], $prefix . 'to_category');
 //            $row['_to_download'] = $this->getIPTables($row['product_id'], $prefix . 'to_download');
             $row['_to_layout'] = $this->getIPTables($row['product_id'], $prefix . 'to_layout');
@@ -639,6 +742,7 @@ WHERE a.attribute_id = ad.attribute_id
             : "</pre></details></div>";
         #endregion
     }
+
 #endregion
 
 }
