@@ -611,7 +611,7 @@ VALUES (
                 }
             }
             // save
-            $this->importedIds[$pId][] = $id;
+            $this->importedIds['attributes'][$pId][] = $id;
         }
     }
 
