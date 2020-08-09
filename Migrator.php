@@ -157,7 +157,7 @@ WHERE $id = cm.comment_id
     private function getTaxonomies($id, $isProductId = true)
     {
         $fromWhere = $isProductId
-            ? "FROM wp_term_relationships tr,
+            ? ", tr.object_id FROM wp_term_relationships tr,
      wp_term_taxonomy tt,
      wp_terms t
 WHERE $id = tr.object_id
@@ -483,8 +483,6 @@ VALUES (
         $this->InsertAttributesGroupIfNotExists();
         $this->InsertProductAttributesIfNotExists($pID);
         $this->InsertProductCategoriesIfNotExists($pID);
-        $this->InsertIntoProduct_Tables($pID);
-        $this->InsertIntoProduct_to_Tables($pID);
 
         $sql = '
 INSERT INTO oc_product (
@@ -553,6 +551,8 @@ VALUES (
         $this->importedIds['products'][$pID] = $this->pdoOC->lastInsertId();
 
         $this->InsertProductReviews($pID);
+        $this->InsertIntoProduct_to_Tables($pID);
+        $this->InsertIntoProduct_Tables($pID);
 //        }
     }
 
@@ -799,7 +799,6 @@ VALUES (
 \'' . 1 . '\'
 );
 ';
-            echo $sql;
             $stmt = $this->pdoOC->query($sql);
             if (!$stmt) {
                 print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
@@ -812,7 +811,52 @@ VALUES (
 
     private function InsertIntoProduct_to_Tables($pID)
     {
-        return $pID;
+        // Category
+        foreach ($this->categoriesWC[$pID] as $category) {
+            if (isset($category['object_id'])) {
+                $sql = '
+INSERT INTO oc_product_to_category
+VALUES (
+\'' . $this->importedIds['products'][$pID] . '\',
+\'' . $this->importedIds['categories'][$pID][$category['term_id']] . '\'
+);
+';
+                $stmt = $this->pdoOC->query($sql);
+                if (!$stmt) {
+                    print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                    return;
+                }
+            }
+        }
+
+        // Store
+        $sql = '
+INSERT INTO oc_product_to_store
+VALUES (
+\'' . $this->importedIds['products'][$pID] . '\',
+\'' . $this->storeId . '\'
+);
+';
+        $stmt = $this->pdoOC->query($sql);
+        if (!$stmt) {
+            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+            return;
+        }
+
+        // Layout
+        $sql = '
+INSERT INTO oc_product_to_layout
+VALUES (
+\'' . $this->importedIds['products'][$pID] . '\',
+\'' . $this->storeId . '\',
+\'' . $this->layoutId . '\'
+);
+';
+        $stmt = $this->pdoOC->query($sql);
+        if (!$stmt) {
+            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+            return;
+        }
     }
 
     private function InsertIntoProduct_Tables($pID)
@@ -827,9 +871,9 @@ VALUES (
 // TODO Product_description
 // TODO Product_image
 // TODO Product_related
-// TODO Product_to_category
-// TODO Product_to_layout
-// TODO Product_to_store
+// DONE Product_to_category
+// DONE Product_to_layout
+// DONE Product_to_store
 //
 // DONE review
 //
