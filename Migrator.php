@@ -35,7 +35,7 @@ class Migrator
         $this->processProducts();
 
         // Insert
-        $this->InsertProducts();
+        $this->InsertProducts(11);
 
         // Check
         $this->getImportedProducts();
@@ -266,7 +266,7 @@ WHERE '$name' = wcat.attribute_name
         foreach ($this->productsWC as $rowId => &$row) {
             $row['tax_class_id'] = $row['meta']['_downloadable'] == 'yes' ? 10 : 0;
             $row['sku'] = $row['meta']['_sku'];
-            $row['quantity'] = $row['meta']['_stock'];
+            $row['quantity'] = is_numeric($row['meta']['_stock']) ? $row['meta']['_stock'] : 0;
             $row['price'] = $row['meta']['_regular_price'];
             $row['special/price'] = $row['meta']['_sale_price'];
             $row['weight_class_id'] = 1; // KG
@@ -474,11 +474,11 @@ VALUES (
         $this->importedIds['manufacturer'] = $id;
     }
 
-    private function InsertProducts()
+    private function InsertProducts($id)
     {
 //        foreach ($this->productsWC as $product) {
 //            $pID = $product['product_id'];
-        $pID = 11;
+        $pID = $id;
         $this->InsertManufacturerIfNotExists();
         $this->InsertAttributesGroupIfNotExists();
         $this->InsertProductAttributesIfNotExists($pID);
@@ -521,19 +521,19 @@ VALUES (
 \'\',
 \'' . $this->productsWC[$pID]['sku'] . '\',
 \'\',
-\'' . $this->productsWC[$pID]['date_added'] . '\',
+\'' . date('Y-m-d H:i:s') . '\',
 \'\',
 \'\',
 \'\',
 \'' . $this->productsWC[$pID]['tax_class_id'] . '\',
-\'' . $this->productsWC[$pID]['date_modified'] . '\',
+\'' . date('Y-m-d H:i:s') . '\',
 
 \'' . $this->productsWC[$pID]['sort_order'] . '\',
 \'' . $this->productsWC[$pID]['status'] . '\',
-\'' . $this->productsWC[$pID]['quantity'] . '\',
+' . $this->productsWC[$pID]['quantity'] . ',
 \'' . $this->productsWC[$pID]['image'] . '\',
 \'' . $this->productsWC[$pID]['price'] . '\',
-\'' . $this->productsWC[$pID]['date_added'] . '\',
+\'' . date('Y-m-d') . '\',
 \'' . $this->productsWC[$pID]['weight'] . '\',
 \'' . $this->productsWC[$pID]['weight_class_id'] . '\',
 \'' . $this->productsWC[$pID]['length'] . '\',
@@ -554,6 +554,9 @@ VALUES (
         $this->InsertIntoProduct_to_Tables($pID);
         $this->InsertIntoProduct_Tables($pID);
 //        }
+        if (isset($id)) {
+            return $this->importedIds['products'][$pID];
+        }
     }
 
     private function InsertAttributesGroupIfNotExists()
@@ -861,16 +864,90 @@ VALUES (
 
     private function InsertIntoProduct_Tables($pID)
     {
-        return $pID;
+        // Attribute
+        foreach ($this->attributeWC[$pID] as $k => $attribute) {
+            $sql = '
+INSERT INTO oc_product_attribute
+VALUES (
+\'' . $this->importedIds['products'][$pID] . '\',
+\'' . $this->importedIds['attributes'][$pID][$k] . '\',
+\'' . $this->defaultLanguage . '\',
+\'' . $attribute['pa_text'] . '\'
+);
+';
+            $stmt = $this->pdoOC->query($sql);
+            if (!$stmt) {
+                print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                return;
+
+            }
+        }
+        // Description
+        $sql = '
+INSERT INTO oc_product_description
+VALUES (
+\'' . $this->importedIds['products'][$pID] . '\',
+\'' . $this->defaultLanguage . '\',
+\'' . $this->productsWC[$pID]['description/name'] . '\',
+\'' . $this->productsWC[$pID]['description/description'] . '\',
+\'' . $this->productsWC[$pID]['description/tags'] . '\',
+\'' . $this->productsWC[$pID]['description/name'] . '\',
+\'\',
+\'\'
+);
+';
+        $stmt = $this->pdoOC->query($sql);
+        if (!$stmt) {
+            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+            return;
+
+        }
+        // Image
+        $sql = '
+INSERT INTO oc_product_image (product_id, image)
+VALUES (
+\'' . $this->importedIds['products'][$pID] . '\',
+\'' . $this->productsWC[$pID]['image'] . '\'
+);
+';
+        $stmt = $this->pdoOC->query($sql);
+        if (!$stmt) {
+            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+            return;
+
+        }
+
+        // Related
+        if (isset($this->productsWC[$pID]['related']) && count($this->productsWC[$pID]['related']) > 0) {
+            $valuesArr = [];
+            foreach ($this->productsWC[$pID]['related'] as $relatedProduct) {
+                $id = $this->InsertProducts($relatedProduct['related_id']);
+                $updatedValues = [
+                    $this->importedIds['products'][$relatedProduct['product_id']],
+                    $id
+                ];
+                $valuesArr[] = '(' . implode(', ', $updatedValues) . ')';
+            }
+            $values = implode(',', $valuesArr);
+            $sql = "
+INSERT INTO oc_product_related
+VALUES $values;
+";
+            $stmt = $this->pdoOC->query($sql);
+            if (!$stmt) {
+                print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                return;
+            }
+        }
     }
 
 
 
 // DONE Product
-// TODO Product_attribute
-// TODO Product_description
-// TODO Product_image
-// TODO Product_related
+// DONE Product_attribute
+// DONE Product_description
+// DONE Product_image
+// DONE Product_related
 // DONE Product_to_category
 // DONE Product_to_layout
 // DONE Product_to_store
