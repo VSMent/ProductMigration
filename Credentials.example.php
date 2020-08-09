@@ -6,6 +6,7 @@ $credentials = [
         'database' => '',
         'user' => '',
         'pass' => '',
+        'tb_prefix' => '',
     ],
 // DB to import (opencart)
     'oc' => [
@@ -13,5 +14,6 @@ $credentials = [
         'database' => '',
         'user' => '',
         'pass' => '',
+        'tb_prefix' => '',
     ]
 ];

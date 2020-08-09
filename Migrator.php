@@ -9,11 +9,13 @@ class Migrator
     private array $categoriesWC = [];
     private array $attributeWC = [];
     private array $reviewWC = [];
+    private string $tbPrefixWC;
 
     private array $productsOC = [];
     private array $categoriesOC = [];
     private array $attributeOC = [];
     private array $reviewOC = [];
+    private string $tbPrefixOC;
 
     private array $importedIds = [];
 
@@ -25,8 +27,10 @@ class Migrator
     private int $defaultLanguage = 1;
     private int $reviewUserId = 0;
 
-    public function migrate($credentials)
+    public function migrate($credentials, $productId)
     {
+        $this->tbPrefixWC = $credentials['wc']['tb_prefix'];
+        $this->tbPrefixOC = $credentials['oc']['tb_prefix'];
         list($this->pdoWC, $this->pdoOC) = DB::initialize($credentials['wc'], $credentials['oc']);
         // Get
         $this->getProducts();
@@ -35,7 +39,7 @@ class Migrator
         $this->processProducts();
 
         // Insert
-        $this->InsertProducts(11);
+        $this->InsertProducts($productId);
 
         // Check
         $this->getImportedProducts();
@@ -54,7 +58,7 @@ p.menu_order as sort_order,
 if(p.post_status = \'publish\',1,0) as status,
 p.post_content as "description/description", 
 p.post_title as "description/name"
-FROM wp_posts p
+FROM ' . $this->tbPrefixWC . 'posts p
 WHERE post_type = \'product\'
 AND post_status <> \'auto-draft\'
 ';
@@ -80,7 +84,7 @@ AND post_status <> \'auto-draft\'
     {
         $sql = "
 SELECT meta_key, meta_value
-FROM wp_postmeta pm
+FROM " . $this->tbPrefixWC . "postmeta pm
 WHERE $id = pm.post_id
 ";
         $stmt = $this->pdoWC->query($sql);
@@ -109,7 +113,7 @@ SELECT
     comment_approved as status,
     comment_date as date_added,
     comment_date as date_modified
-FROM wp_comments c
+FROM " . $this->tbPrefixWC . "comments c
 WHERE $id = c.comment_post_ID
 AND c.comment_type = 'review'
 ";
@@ -132,7 +136,7 @@ AND c.comment_type = 'review'
     {
         $sql = "
 SELECT meta_key, meta_value
-FROM wp_commentmeta cm
+FROM " . $this->tbPrefixWC . "commentmeta cm
 WHERE $id = cm.comment_id
 ";
         $stmt = $this->pdoWC->query($sql);
@@ -157,14 +161,14 @@ WHERE $id = cm.comment_id
     private function getTaxonomies($id, $isProductId = true)
     {
         $fromWhere = $isProductId
-            ? ", tr.object_id FROM wp_term_relationships tr,
-     wp_term_taxonomy tt,
-     wp_terms t
+            ? ", tr.object_id FROM " . $this->tbPrefixWC . "term_relationships tr,
+     " . $this->tbPrefixWC . "term_taxonomy tt,
+     " . $this->tbPrefixWC . "terms t
 WHERE $id = tr.object_id
   AND tr.term_taxonomy_id = tt.term_taxonomy_id
   AND tt.term_id = t.term_id"
-            : "FROM wp_term_taxonomy tt,
-     wp_terms t
+            : "FROM " . $this->tbPrefixWC . "term_taxonomy tt,
+     " . $this->tbPrefixWC . "terms t
 WHERE t.term_id = tt.term_id
   AND tt.term_id = $id";
 
@@ -195,7 +199,7 @@ $fromWhere
     {
         $sql = "
 SELECT meta_key, meta_value
-FROM wp_termmeta tm
+FROM " . $this->tbPrefixWC . "termmeta tm
 WHERE $id = tm.term_id
 ";
         $stmt = $this->pdoWC->query($sql);
@@ -219,8 +223,8 @@ WHERE $id = tm.term_id
             : "$id = p.post_parent";
         $sql = "
 SELECT p.ID,
-       REPLACE(p.guid, CONCAT((SELECT option_value FROM wp_options WHERE option_name = 'home'), '/'), '') as guid
-FROM wp_posts p
+       REPLACE(p.guid, CONCAT((SELECT option_value FROM " . $this->tbPrefixWC . "options WHERE option_name = 'home'), '/'), '') as guid
+FROM " . $this->tbPrefixWC . "posts p
 WHERE $where
   AND p.post_type = 'attachment'
 ";
@@ -244,7 +248,7 @@ WHERE $where
     {
         $sql = "
 SELECT attribute_label
-FROM wp_woocommerce_attribute_taxonomies wcat
+FROM " . $this->tbPrefixWC . "woocommerce_attribute_taxonomies wcat
 WHERE '$name' = wcat.attribute_name
 ";
         $stmt = $this->pdoWC->query($sql);
@@ -293,11 +297,6 @@ WHERE '$name' = wcat.attribute_name
             }
 
             $this->attributeWC[$rowId] = unserialize($row['meta']['_product_attributes']);
-//            if (is_array($productAttributes)) {
-//                foreach ($productAttributes as $attribute) {
-//                    $row['image/'][] = ['product_image_id' => $imageId, 'image' => $row['images'][$imageId], 'product_id' => $rowId, 'sort_order' => 0];
-//                }
-//            }
             $row['description/tags'] = $this->processProductsTaxonomies($row['taxonomies'], $rowId);
             $this->reviewWC[$rowId] = $row['review'];
             $this->processProductsAttributes($rowId);
@@ -431,7 +430,7 @@ WHERE '$name' = wcat.attribute_name
 // get from db if exists
         $sql = "
 SELECT manufacturer_id
-FROM oc_manufacturer
+FROM " . $this->tbPrefixOC . "manufacturer
 WHERE name = '$this->manufacturerName'
 LIMIT 1
 ;
@@ -445,7 +444,7 @@ LIMIT 1
         if (!isset($id) || !is_numeric($id)) {
             // Insert new one
             $sql = '
-INSERT INTO oc_manufacturer (
+INSERT INTO ' . $this->tbPrefixOC . 'manufacturer (
 sort_order,
 name
 )
@@ -463,7 +462,7 @@ VALUES (
             $id = $this->pdoOC->lastInsertId();
 
 
-            $sql = 'INSERT INTO oc_manufacturer_to_store VALUES (' . $id . ',' . $this->storeId . ');';
+            $sql = 'INSERT INTO ' . $this->tbPrefixOC . 'manufacturer_to_store VALUES (' . $id . ',' . $this->storeId . ');';
             $stmt = $this->pdoOC->query($sql);
             if (!$stmt) {
                 print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
@@ -485,7 +484,7 @@ VALUES (
         $this->InsertProductCategoriesIfNotExists($pID);
 
         $sql = '
-INSERT INTO oc_product (
+INSERT INTO ' . $this->tbPrefixOC . 'product (
 isbn,
 model,
 stock_status_id,
@@ -564,7 +563,7 @@ VALUES (
 // get from db if exists
         $sql = "
 SELECT attribute_group_id
-FROM oc_attribute_group_description
+FROM " . $this->tbPrefixOC . "attribute_group_description
 WHERE name = '$this->attributeGroupName'
 LIMIT 1
 ;
@@ -578,7 +577,7 @@ LIMIT 1
         if (!isset($id) || !is_numeric($id)) {
             // Insert new one
             $sql = '
-INSERT INTO oc_attribute_group (sort_order) VALUES (0);
+INSERT INTO ' . $this->tbPrefixOC . 'attribute_group (sort_order) VALUES (0);
 ';
             $stmt = $this->pdoOC->query($sql);
             if (!$stmt) {
@@ -590,7 +589,7 @@ INSERT INTO oc_attribute_group (sort_order) VALUES (0);
 
 
             $sql = '
-INSERT INTO oc_attribute_group_description 
+INSERT INTO ' . $this->tbPrefixOC . 'attribute_group_description 
 VALUES (
 ' . $id . ',
 ' . $this->defaultLanguage . ',
@@ -613,7 +612,7 @@ VALUES (
 // get from db if exists
             $sql = "
 SELECT attribute_id
-FROM oc_attribute_description
+FROM " . $this->tbPrefixOC . "attribute_description
 WHERE name = '" . $attribute['ad_name'] . "'
 LIMIT 1
 ;
@@ -628,7 +627,7 @@ LIMIT 1
             if (!isset($id) || !is_numeric($id)) {
                 // Insert new one
                 $sql = '
-INSERT INTO oc_attribute (attribute_group_id, sort_order) VALUES (' . $this->importedIds['attribute_group'] . ',0);
+INSERT INTO ' . $this->tbPrefixOC . 'attribute (attribute_group_id, sort_order) VALUES (' . $this->importedIds['attribute_group'] . ',0);
 ';
                 $stmt = $this->pdoOC->query($sql);
                 if (!$stmt) {
@@ -640,7 +639,7 @@ INSERT INTO oc_attribute (attribute_group_id, sort_order) VALUES (' . $this->imp
 
 
                 $sql = '
-INSERT INTO oc_attribute_description 
+INSERT INTO ' . $this->tbPrefixOC . 'attribute_description 
 VALUES (
 ' . $id . ',
 ' . $this->defaultLanguage . ',
@@ -665,7 +664,7 @@ VALUES (
 // get from db if exists
             $sql = "
 SELECT category_id
-FROM oc_category_description
+FROM " . $this->tbPrefixOC . "category_description
 WHERE name = '" . $category['name'] . "'
 LIMIT 1
 ;
@@ -684,7 +683,7 @@ LIMIT 1
                     ? 0
                     : $this->importedIds['categories'][$pID][$category['parent']];
                 $sql = '
-INSERT INTO oc_category (
+INSERT INTO ' . $this->tbPrefixOC . 'category (
 status
 , date_added
 , date_modified
@@ -714,7 +713,7 @@ VALUES (
                 $id = $this->pdoOC->lastInsertId();
 
                 $sql = '
-INSERT INTO oc_category_description 
+INSERT INTO ' . $this->tbPrefixOC . 'category_description 
 VALUES (
 ' . $id . ',
 ' . $this->defaultLanguage . ',
@@ -742,7 +741,7 @@ VALUES (
                 }
                 $values = implode(',', $valuesArr);
                 $sql = "
-INSERT INTO oc_category_path 
+INSERT INTO " . $this->tbPrefixOC . "category_path 
 VALUES $values;
 ";
                 $stmt = $this->pdoOC->query($sql);
@@ -753,7 +752,7 @@ VALUES $values;
 
                 // add to store
                 $sql = '
-INSERT INTO oc_category_to_store 
+INSERT INTO ' . $this->tbPrefixOC . 'category_to_store 
 VALUES (
 ' . $id . ',
 ' . $this->storeId . '
@@ -768,7 +767,7 @@ VALUES (
 
                 // add to layout
                 $sql = '
-INSERT INTO oc_category_to_layout 
+INSERT INTO ' . $this->tbPrefixOC . 'category_to_layout 
 VALUES (
 ' . $id . ',
 ' . $this->storeId . ',
@@ -788,7 +787,7 @@ VALUES (
     {
         foreach ($this->reviewWC[$pID] as $review) {
             $sql = '
-INSERT INTO oc_review (
+INSERT INTO ' . $this->tbPrefixOC . 'review (
 author, rating, date_added, date_modified, product_id, text, customer_id, status
 )
 VALUES (
@@ -818,7 +817,7 @@ VALUES (
         foreach ($this->categoriesWC[$pID] as $category) {
             if (isset($category['object_id'])) {
                 $sql = '
-INSERT INTO oc_product_to_category
+INSERT INTO ' . $this->tbPrefixOC . 'product_to_category
 VALUES (
 \'' . $this->importedIds['products'][$pID] . '\',
 \'' . $this->importedIds['categories'][$pID][$category['term_id']] . '\'
@@ -834,7 +833,7 @@ VALUES (
 
         // Store
         $sql = '
-INSERT INTO oc_product_to_store
+INSERT INTO ' . $this->tbPrefixOC . 'product_to_store
 VALUES (
 \'' . $this->importedIds['products'][$pID] . '\',
 \'' . $this->storeId . '\'
@@ -848,7 +847,7 @@ VALUES (
 
         // Layout
         $sql = '
-INSERT INTO oc_product_to_layout
+INSERT INTO ' . $this->tbPrefixOC . 'product_to_layout
 VALUES (
 \'' . $this->importedIds['products'][$pID] . '\',
 \'' . $this->storeId . '\',
@@ -867,7 +866,7 @@ VALUES (
         // Attribute
         foreach ($this->attributeWC[$pID] as $k => $attribute) {
             $sql = '
-INSERT INTO oc_product_attribute
+INSERT INTO ' . $this->tbPrefixOC . 'product_attribute
 VALUES (
 \'' . $this->importedIds['products'][$pID] . '\',
 \'' . $this->importedIds['attributes'][$pID][$k] . '\',
@@ -884,7 +883,7 @@ VALUES (
         }
         // Description
         $sql = '
-INSERT INTO oc_product_description
+INSERT INTO ' . $this->tbPrefixOC . 'product_description
 VALUES (
 \'' . $this->importedIds['products'][$pID] . '\',
 \'' . $this->defaultLanguage . '\',
@@ -904,7 +903,7 @@ VALUES (
         }
         // Image
         $sql = '
-INSERT INTO oc_product_image (product_id, image)
+INSERT INTO ' . $this->tbPrefixOC . 'product_image (product_id, image)
 VALUES (
 \'' . $this->importedIds['products'][$pID] . '\',
 \'' . $this->productsWC[$pID]['image'] . '\'
@@ -930,7 +929,7 @@ VALUES (
             }
             $values = implode(',', $valuesArr);
             $sql = "
-INSERT INTO oc_product_related
+INSERT INTO " . $this->tbPrefixOC . "product_related
 VALUES $values;
 ";
             $stmt = $this->pdoOC->query($sql);
@@ -984,8 +983,8 @@ sort_order,
 status,
 tax_class_id,
 p.*
-FROM oc_product p
-WHERE product_id >= 51
+FROM ' . $this->tbPrefixOC . 'product p
+WHERE product_id IN (' . implode(', ', $this->importedIds['products']) . ')
 ';
         $stmt = $this->pdoOC->query($sql);
         if (!$stmt) {
@@ -995,9 +994,9 @@ WHERE product_id >= 51
 
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $prefix = 'oc_product_';
+        $prefix = '' . $this->tbPrefixOC . 'product_';
         foreach ($rows as $row) {
-//            $row['manufacturer'] = $this->getIPTables($row['manufacturer_id'], 'oc_manufacturer', '*', 't.manufacturer_id = $id');
+//            $row['manufacturer'] = $this->getIPTables($row['manufacturer_id'], $this->tbPrefixOC.'manufacturer', '*', 't.manufacturer_id = $id');
 //            $row['_attribute'] = $this->getIPTables($row['product_id'], $prefix . 'attribute');
             $row['_description'] = $this->getIPTables($row['product_id'], $prefix . 'description');
 //            $row['_discount'] = $this->getIPTables($row['product_id'], $prefix . 'discount');
@@ -1057,10 +1056,10 @@ WHERE $where
     private function getImportedCategories($id, $isProductId = true)
     {
         $fromWhere = $isProductId
-            ? "FROM oc_category c, oc_product_to_category ptc
+            ? "FROM " . $this->tbPrefixOC . "category c, " . $this->tbPrefixOC . "product_to_category ptc
 WHERE ptc.product_id = $id
 AND c.category_id = ptc.category_id"
-            : "FROM oc_category c
+            : "FROM " . $this->tbPrefixOC . "category c
 WHERE c.category_id = $id";
         $sql = "
 SELECT 
@@ -1091,7 +1090,7 @@ $fromWhere
         $sql = "
 SELECT 
 *
-FROM oc_review r
+FROM " . $this->tbPrefixOC . "review r
 WHERE product_id = $id
 ";
         $stmt = $this->pdoOC->query($sql);
@@ -1116,11 +1115,11 @@ a.attribute_id
 ,agd.name as adg_name
 ,pa.text as pa_text 
 FROM
-oc_attribute a
-,oc_attribute_description ad
-,oc_attribute_group ag
-,oc_attribute_group_description agd
-,oc_product_attribute pa
+" . $this->tbPrefixOC . "attribute a
+," . $this->tbPrefixOC . "attribute_description ad
+," . $this->tbPrefixOC . "attribute_group ag
+," . $this->tbPrefixOC . "attribute_group_description agd
+," . $this->tbPrefixOC . "product_attribute pa
 WHERE a.attribute_id = ad.attribute_id
   AND a.attribute_group_id = agd.attribute_group_id
   AND a.attribute_id = pa.attribute_id
@@ -1148,15 +1147,6 @@ WHERE a.attribute_id = ad.attribute_id
 
     public function listAll($isCLI, $show = 'a')
     {
-
-        echo $isCLI
-            ? "Imported IDs\n" . str_repeat("_", 10) . "\n"
-            : "<div style='font-size: 10px;'><pre style='white-space: pre-wrap;word-wrap: break-word;'>";
-        print_r($this->importedIds);
-        echo $isCLI
-            ? "\n"
-            : "</pre></div>";
-
         #region WC
         echo $isCLI
             ? "products WC\n" . str_repeat("_", 10) . "\n"
@@ -1235,7 +1225,7 @@ WHERE a.attribute_id = ad.attribute_id
 #endregion
 
 
-// TODO table prefix
+// DONE table prefix
 // TODO phpDoc
 // TODO Refactor
 }
