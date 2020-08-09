@@ -15,6 +15,8 @@ class Migrator
     private array $attributeOC = [];
     private array $reviewOC = [];
 
+    private array $ImportedIds = [];
+
     public function migrate($credentials)
     {
         list($this->pdoWC, $this->pdoOC) = DB::initialize($credentials['wc'], $credentials['oc']);
@@ -25,6 +27,7 @@ class Migrator
         $this->processProducts();
 
         // Insert
+        $this->InsertManufacturer();
         $this->InsertProduct(11);
 
         // Check
@@ -388,6 +391,35 @@ WHERE '$name' = wcat.attribute_name
 
 #region INSERT_DATA
 
+    private function InsertManufacturer()
+    {
+        $sql = '
+INSERT INTO oc_manufacturer (
+sort_order,
+name
+)
+VALUES (
+0,
+"Migrated from WooCommerce"
+);
+';
+        $stmt = $this->pdoOC->query($sql);
+        if (!$stmt) {
+            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+            return;
+        }
+
+        $this->ImportedIds['manufacturer'] = $this->pdoOC->lastInsertId();
+
+
+        $sql = 'INSERT INTO oc_manufacturer_to_store VALUES (' . $this->ImportedIds['manufacturer'] . ',0);';
+        $stmt = $this->pdoOC->query($sql);
+        if (!$stmt) {
+            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+            return;
+        }
+    }
+
     private function InsertProduct($id)
     {
         $sql = '
@@ -421,74 +453,65 @@ length_class_id
 )
 VALUES (
 "",
-"'. $this->productsWC[$id]['description/name'] . '",
+"' . $this->productsWC[$id]['description/name'] . '",
 6,
-0, 
+"' . $this->ImportedIds['manufacturer'] . '", 
 "",
-"'. $this->productsWC[$id]['sku'] . '",
+"' . $this->productsWC[$id]['sku'] . '",
 "",
-"'. $this->productsWC[$id]['date_added'] . '",
+"' . $this->productsWC[$id]['date_added'] . '",
 "",
 "",
 "",
-"'. $this->productsWC[$id]['tax_class_id'] . '",
-"'. $this->productsWC[$id]['date_modified'] . '",
+"' . $this->productsWC[$id]['tax_class_id'] . '",
+"' . $this->productsWC[$id]['date_modified'] . '",
 
-"'. $this->productsWC[$id]['sort_order'] . '",
-"'. $this->productsWC[$id]['status'] . '",
-"'. $this->productsWC[$id]['quantity'] . '",
-"'. $this->productsWC[$id]['image'] . '",
-"'. $this->productsWC[$id]['price'] . '",
-"'. $this->productsWC[$id]['date_added'] . '",
-"'. $this->productsWC[$id]['weight'] . '",
-"'. $this->productsWC[$id]['weight_class_id'] . '",
-"'. $this->productsWC[$id]['length'] . '",
-"'. $this->productsWC[$id]['width'] . '",
-"'. $this->productsWC[$id]['height'] . '",
-"'. $this->productsWC[$id]['length_class_id'] . '"
+"' . $this->productsWC[$id]['sort_order'] . '",
+"' . $this->productsWC[$id]['status'] . '",
+"' . $this->productsWC[$id]['quantity'] . '",
+"' . $this->productsWC[$id]['image'] . '",
+"' . $this->productsWC[$id]['price'] . '",
+"' . $this->productsWC[$id]['date_added'] . '",
+"' . $this->productsWC[$id]['weight'] . '",
+"' . $this->productsWC[$id]['weight_class_id'] . '",
+"' . $this->productsWC[$id]['length'] . '",
+"' . $this->productsWC[$id]['width'] . '",
+"' . $this->productsWC[$id]['height'] . '",
+"' . $this->productsWC[$id]['length_class_id'] . '"
 );
 ';
-//        echo $sql;
         $stmt = $this->pdoOC->query($sql);
         if (!$stmt) {
             print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
             return;
         }
 
-        print($this->pdoOC->lastInsertId());
-//
-//    foreach ($rows as $row) {
-//        $row['meta'] = $this->getProductMeta($row['ID']);
-//        $row['review'] = $this->getProductReview($row['ID']);
-//        $row['taxonomies'] = $this->getTaxonomies($row['ID']);
-//        $row['images'] = $this->getImages($row['ID']);
-//        $this->productsWC[$row['ID']] = $row;
-//    }
+        $this->ImportedIds['products'] = [$id => $this->pdoOC->lastInsertId()];
     }
 
-/// Product
-/// Product_attribute
-/// Product_description
-/// Product_image
-/// Product_related
-/// Product_to_category
-/// Product_to_layout
-/// Product_to_store
-///
-/// review
-///
-/// Catgeory
-/// Catgeory_description
-/// Catgeory_to_layout
-/// Catgeory_to_store
-///
-/// Attribute
-/// Attribute_description
-/// Attribute_group
-/// Attribute_grpup_description
-///
-/// Manufacturer
-/// Manufacturer_to_store
+// DONE Product
+// TODO Product_attribute
+// TODO Product_description
+// TODO Product_image
+// TODO Product_related
+// TODO Product_to_category
+// TODO Product_to_layout
+// TODO Product_to_store
+//
+// TODO review
+//
+// TODO Catgeory
+// TODO Catgeory_description
+// TODO Catgeory_to_layout
+// TODO Catgeory_to_store
+//
+// TODO Attribute
+// TODO Attribute_description
+// TODO Attribute_group
+// TODO Attribute_grpup_description
+//
+// DONE Manufacturer
+// DONE Manufacturer_to_store
 #endregion
 
 #region SHOW_RESULT
