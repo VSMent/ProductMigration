@@ -18,8 +18,10 @@ class Migrator
     private array $importedIds = [];
 
     private string $manufacturerName = "Migrated from WooCommerce";
+    private string $attributeGroupName = "Attributes";
     private int $layoutId = 0;
     private int $storeId = 0;
+    private int $defaultLanguage = 1;
 
     public function migrate($credentials)
     {
@@ -31,8 +33,11 @@ class Migrator
         $this->processProducts();
 
         // Insert
+        $productId = 11;
         $this->InsertManufacturerIfNotExists();
-        $this->InsertProduct(11);
+        $this->InsertProduct($productId);
+        $this->InsertAttributesGroupIfNotExists();
+        $this->InsertProductAttributesIfNotExists($productId);
 
         // Check
         $this->getImportedProducts();
@@ -374,7 +379,6 @@ WHERE '$name' = wcat.attribute_name
         foreach ($this->attributeWC[$pId] as $k => $attribute) {
             $attribute['ad_name'] = $attribute['name'];
             $attribute['pa_text'] = $attribute['value'];
-            $attribute['adg_name'] = 'Attributes';
 
             unset($attribute['name']);
             unset($attribute['value']);
@@ -443,7 +447,7 @@ VALUES (
         $this->importedIds['manufacturer'] = $id;
     }
 
-    private function InsertProduct($id)
+    private function InsertProduct($pId)
     {
         $sql = '
 INSERT INTO oc_product (
@@ -476,31 +480,31 @@ length_class_id
 )
 VALUES (
 "",
-"' . $this->productsWC[$id]['description/name'] . '",
+"' . $this->productsWC[$pId]['description/name'] . '",
 6,
 "' . $this->importedIds['manufacturer'] . '", 
 "",
-"' . $this->productsWC[$id]['sku'] . '",
+"' . $this->productsWC[$pId]['sku'] . '",
 "",
-"' . $this->productsWC[$id]['date_added'] . '",
+"' . $this->productsWC[$pId]['date_added'] . '",
 "",
 "",
 "",
-"' . $this->productsWC[$id]['tax_class_id'] . '",
-"' . $this->productsWC[$id]['date_modified'] . '",
+"' . $this->productsWC[$pId]['tax_class_id'] . '",
+"' . $this->productsWC[$pId]['date_modified'] . '",
 
-"' . $this->productsWC[$id]['sort_order'] . '",
-"' . $this->productsWC[$id]['status'] . '",
-"' . $this->productsWC[$id]['quantity'] . '",
-"' . $this->productsWC[$id]['image'] . '",
-"' . $this->productsWC[$id]['price'] . '",
-"' . $this->productsWC[$id]['date_added'] . '",
-"' . $this->productsWC[$id]['weight'] . '",
-"' . $this->productsWC[$id]['weight_class_id'] . '",
-"' . $this->productsWC[$id]['length'] . '",
-"' . $this->productsWC[$id]['width'] . '",
-"' . $this->productsWC[$id]['height'] . '",
-"' . $this->productsWC[$id]['length_class_id'] . '"
+"' . $this->productsWC[$pId]['sort_order'] . '",
+"' . $this->productsWC[$pId]['status'] . '",
+"' . $this->productsWC[$pId]['quantity'] . '",
+"' . $this->productsWC[$pId]['image'] . '",
+"' . $this->productsWC[$pId]['price'] . '",
+"' . $this->productsWC[$pId]['date_added'] . '",
+"' . $this->productsWC[$pId]['weight'] . '",
+"' . $this->productsWC[$pId]['weight_class_id'] . '",
+"' . $this->productsWC[$pId]['length'] . '",
+"' . $this->productsWC[$pId]['width'] . '",
+"' . $this->productsWC[$pId]['height'] . '",
+"' . $this->productsWC[$pId]['length_class_id'] . '"
 );
 ';
         $stmt = $this->pdoOC->query($sql);
@@ -509,9 +513,107 @@ VALUES (
             return;
         }
 
-        $this->importedIds['products'] = [$id => $this->pdoOC->lastInsertId()];
+        $this->importedIds['products'] = [$pId => $this->pdoOC->lastInsertId()];
     }
 
+    private function InsertAttributesGroupIfNotExists()
+    {
+// get from db if exists
+        $sql = "
+SELECT attribute_group_id
+FROM oc_attribute_group_description
+WHERE name = '$this->attributeGroupName'
+LIMIT 1
+;
+";
+        $stmt = $this->pdoOC->query($sql);
+        if (!$stmt) {
+            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+            return;
+        }
+        $id = $stmt->fetchAll(PDO::FETCH_COLUMN)[0];
+        if (!isset($id) || !is_numeric($id)) {
+            // Insert new one
+            $sql = '
+INSERT INTO oc_attribute_group (sort_order) VALUES (0);
+';
+            $stmt = $this->pdoOC->query($sql);
+            if (!$stmt) {
+                print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                return;
+            }
+
+            $id = $this->pdoOC->lastInsertId();
+
+
+            $sql = '
+INSERT INTO oc_attribute_group_description 
+VALUES (
+' . $id . ',
+' . $this->defaultLanguage . ',
+"' . $this->attributeGroupName . '"
+);
+';
+            $stmt = $this->pdoOC->query($sql);
+            if (!$stmt) {
+                print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                return;
+            }
+        }
+        // save
+        $this->importedIds['attribute_group'] = $id;
+    }
+
+    private function InsertProductAttributesIfNotExists($pId)
+    {
+        foreach ($this->attributeWC[$pId] as $attribute) {
+// get from db if exists
+            $sql = "
+SELECT attribute_id
+FROM oc_attribute_description
+WHERE name = '" . $attribute['ad_name'] . "'
+LIMIT 1
+;
+";
+            $stmt = $this->pdoOC->query($sql);
+            if (!$stmt) {
+                print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                return;
+            }
+            $id = $stmt->fetchAll(PDO::FETCH_COLUMN)[0];
+
+            if (!isset($id) || !is_numeric($id)) {
+                // Insert new one
+                $sql = '
+INSERT INTO oc_attribute (attribute_group_id, sort_order) VALUES (' . $this->importedIds['attribute_group'] . ',0);
+';
+                $stmt = $this->pdoOC->query($sql);
+                if (!$stmt) {
+                    print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                    return;
+                }
+
+                $id = $this->pdoOC->lastInsertId();
+
+
+                $sql = '
+INSERT INTO oc_attribute_description 
+VALUES (
+' . $id . ',
+' . $this->defaultLanguage . ',
+"' . $attribute['ad_name'] . '"
+);
+';
+                $stmt = $this->pdoOC->query($sql);
+                if (!$stmt) {
+                    print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                    return;
+                }
+            }
+            // save
+            $this->importedIds[$pId][] = $id;
+        }
+    }
 
 // DONE Product
 // TODO Product_attribute
@@ -529,10 +631,10 @@ VALUES (
 // TODO Catgeory_to_layout
 // TODO Catgeory_to_store
 //
-// TODO Attribute
-// TODO Attribute_description
-// TODO Attribute_group
-// TODO Attribute_grpup_description
+// DONE Attribute
+// DONE Attribute_description
+// DONE Attribute_group
+// DONE Attribute_group_description
 //
 // DONE Manufacturer
 // DONE Manufacturer_to_store
@@ -792,6 +894,9 @@ WHERE a.attribute_id = ad.attribute_id
 
 #endregion
 
+
+// TODO table prefix
+// TODO phpDoc
 }
 
 
