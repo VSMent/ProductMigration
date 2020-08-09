@@ -15,7 +15,11 @@ class Migrator
     private array $attributeOC = [];
     private array $reviewOC = [];
 
-    private array $ImportedIds = [];
+    private array $importedIds = [];
+
+    private string $manufacturerName = "Migrated from WooCommerce";
+    private int $layoutId = 0;
+    private int $storeId = 0;
 
     public function migrate($credentials)
     {
@@ -27,7 +31,7 @@ class Migrator
         $this->processProducts();
 
         // Insert
-        $this->InsertManufacturer();
+        $this->InsertManufacturerIfNotExists();
         $this->InsertProduct(11);
 
         // Check
@@ -391,33 +395,52 @@ WHERE '$name' = wcat.attribute_name
 
 #region INSERT_DATA
 
-    private function InsertManufacturer()
+    private function InsertManufacturerIfNotExists()
     {
-        $sql = '
+// get from db if exists
+        $sql = "
+SELECT manufacturer_id
+FROM oc_manufacturer
+WHERE name = '$this->manufacturerName'
+LIMIT 1
+;
+";
+        $stmt = $this->pdoOC->query($sql);
+        if (!$stmt) {
+            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+            return;
+        }
+        $id = $stmt->fetchAll(PDO::FETCH_COLUMN)[0];
+        if (!isset($id) || !is_numeric($id)) {
+            // Insert new one
+            $sql = '
 INSERT INTO oc_manufacturer (
 sort_order,
 name
 )
 VALUES (
 0,
-"Migrated from WooCommerce"
+"' . $this->manufacturerName . '"
 );
 ';
-        $stmt = $this->pdoOC->query($sql);
-        if (!$stmt) {
-            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
-            return;
+            $stmt = $this->pdoOC->query($sql);
+            if (!$stmt) {
+                print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                return;
+            }
+
+            $id = $this->pdoOC->lastInsertId();
+
+
+            $sql = 'INSERT INTO oc_manufacturer_to_store VALUES (' . $id . ',' . $this->storeId . ');';
+            $stmt = $this->pdoOC->query($sql);
+            if (!$stmt) {
+                print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
+                return;
+            }
         }
-
-        $this->ImportedIds['manufacturer'] = $this->pdoOC->lastInsertId();
-
-
-        $sql = 'INSERT INTO oc_manufacturer_to_store VALUES (' . $this->ImportedIds['manufacturer'] . ',0);';
-        $stmt = $this->pdoOC->query($sql);
-        if (!$stmt) {
-            print "Error occurred. Around line " . __LINE__ . " in " . __FUNCTION__ . " in " . __FILE__ . "\n";
-            return;
-        }
+        // save
+        $this->importedIds['manufacturer'] = $id;
     }
 
     private function InsertProduct($id)
@@ -455,7 +478,7 @@ VALUES (
 "",
 "' . $this->productsWC[$id]['description/name'] . '",
 6,
-"' . $this->ImportedIds['manufacturer'] . '", 
+"' . $this->importedIds['manufacturer'] . '", 
 "",
 "' . $this->productsWC[$id]['sku'] . '",
 "",
@@ -486,8 +509,9 @@ VALUES (
             return;
         }
 
-        $this->ImportedIds['products'] = [$id => $this->pdoOC->lastInsertId()];
+        $this->importedIds['products'] = [$id => $this->pdoOC->lastInsertId()];
     }
+
 
 // DONE Product
 // TODO Product_attribute
@@ -528,7 +552,7 @@ status,
 tax_class_id,
 p.*
 FROM oc_product p
-WHERE product_id = 51
+WHERE product_id >= 51
 ';
         $stmt = $this->pdoOC->query($sql);
         if (!$stmt) {
